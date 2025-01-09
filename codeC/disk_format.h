@@ -1,7 +1,6 @@
-#ifndef UTILS_H
-#define UTILS_H
+#ifndef DISK_FORMAT_H
+#define DISK_FORMAT_H
 
-int run_command(const char *command);
-void list_disks();
+int format_disk(const char *disk, const char *fs_choice);
 
 #endif

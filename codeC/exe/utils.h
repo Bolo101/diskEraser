@@ -2,11 +2,11 @@
 #define UTILS_H
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <windows.h>
 
-void run_command(const char *command);
 void list_disks();
+int run_command(const char *command);
 
-#endif /* UTILS_H */
+// Function to display a progress bar
+void display_progress(const char *message, int duration);
+
+#endif // UTILS_H

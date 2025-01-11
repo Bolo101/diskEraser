@@ -1,24 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h> // For sleep function on POSIX
 #include "disk_erase.h"
 #include "disk_partition.h"
 #include "disk_format.h"
 #include "utils.h"
 
-// Function to display a progress bar
-void display_progress(const char *message, int duration) {
-    printf("%s\n", message);
-    for (int i = 0; i <= 100; i += 10) {
-        printf("\r[%-10s] %d%%", "##########" + (10 - i / 10), i);
-        fflush(stdout);
-        sleep(1);  // Simulates work being done (use _sleep on Windows)
-    }
-    printf("\n");
-}
-
-// Function to select a single disk and return its identifier
 void select_disk(char *selected_disk, size_t size) {
     list_disks();
     printf("Enter the disk to erase (e.g., C:): ");
@@ -26,7 +13,6 @@ void select_disk(char *selected_disk, size_t size) {
     selected_disk[strcspn(selected_disk, "\n")] = 0;  // Remove newline character
 }
 
-// Function to allow the user to choose a filesystem
 void choose_filesystem(const char *disk) {
     if (disk == NULL || strlen(disk) == 0) {
         printf("Error: No valid disk provided.\n");
@@ -46,15 +32,15 @@ void choose_filesystem(const char *disk) {
 
         if (strcmp(choice, "1") == 0) {
             printf("Formatting disk %s to NTFS...\n", disk);
-            format_disk(disk, "ntfs");  // Call format_disk
+            format_disk(disk, "ntfs");
             break;
         } else if (strcmp(choice, "2") == 0) {
             printf("Formatting disk %s to EXT4...\n", disk);
-            format_disk(disk, "ext4");  // Call format_disk
+            format_disk(disk, "ext4");
             break;
         } else if (strcmp(choice, "3") == 0) {
             printf("Formatting disk %s to VFAT...\n", disk);
-            format_disk(disk, "vfat");  // Call format_disk
+            format_disk(disk, "vfat");
             break;
         } else {
             printf("Invalid choice. Please try again.\n");
@@ -63,8 +49,8 @@ void choose_filesystem(const char *disk) {
 }
 
 int main() {
-    char selected_disk[100];  // Buffer to hold the selected disk
-    int passes = 7;  // Default number of overwrite passes for secure erasure
+    char selected_disk[100];
+    int passes = 7;
 
     // Step 1: Select a disk
     select_disk(selected_disk, sizeof(selected_disk));
@@ -74,18 +60,16 @@ int main() {
         return 1;
     }
 
-    // Step 2: Erase the selected disk with progress display
+    // Step 2: Erase the selected disk
     printf("Erasing disk %s with %d passes...\n", selected_disk, passes);
-    display_progress("Erasing in progress:", 10);  // Progress bar for disk erasure
-    erase_disk(selected_disk, passes);  // Pass both the disk and the number of passes
+    erase_disk(selected_disk, passes);
 
-    // Step 3: Partition the disk (if needed)
+    // Step 3: Partition the disk
     printf("Partitioning disk %s...\n", selected_disk);
-    display_progress("Partitioning in progress:", 5);  // Progress bar for partitioning
     partition_disk(selected_disk);
 
     // Step 4: Choose and format the filesystem
-    choose_filesystem(selected_disk);  // Pass the disk as an argument
+    choose_filesystem(selected_disk);
 
     printf("Operation completed successfully on disk %s.\n", selected_disk);
     return 0;

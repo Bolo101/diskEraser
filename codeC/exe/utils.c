@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <windows.h>  // For sleep function on Windows
 
 int run_command(const char *command) {
     int ret = system(command);
@@ -16,4 +17,15 @@ void list_disks() {
     if (!run_command(command)) {
         printf("Failed to list disks. Ensure the program is run with appropriate permissions.\n");
     }
+}
+
+// Function to display a progress bar
+void display_progress(const char *message, int duration) {
+    printf("%s\n", message);
+    for (int i = 0; i <= 100; i += 10) {
+        printf("\r[%-10s] %d%%", "##########" + (10 - i / 10), i);
+        fflush(stdout);
+        Sleep(duration * 1000);  // Sleep for 'duration' seconds
+    }
+    printf("\n");
 }

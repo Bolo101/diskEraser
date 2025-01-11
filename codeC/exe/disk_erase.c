@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <windows.h>
 #include <time.h>
+#include "utils.h"
 
 void display_progress_bar(unsigned long long progress, unsigned long long total, int pass_num, const char *device) {
     int bar_length = 50;
@@ -71,11 +72,19 @@ void write_zero_data(const char *device) {
     CloseHandle(hDevice);
 }
 
-void erase_disk(const char *device, int passes) {
-    printf("Erasing %s with multiple random data passes and a final zero pass...\n", device);
+void erase_disk(const char *disk, int passes) {
+    if (disk == NULL || strlen(disk) == 0) {
+        printf("Error: No valid disk provided.\n");
+        return;
+    }
 
-    write_random_data(device, passes);
-    write_zero_data(device);
+    for (int i = 0; i < passes; i++) {
+        printf("Pass %d/%d: Writing random data to disk %s...\n", i + 1, passes, disk);
+        write_random_data(disk, passes); // Write random data
+    }
 
-    printf("Disk %s successfully erased with random data and zeros.\n", device);
+    printf("Final Pass: Writing zeros to disk %s...\n", disk);
+    write_zero_data(disk); // Write zeros
+
+    printf("Disk %s has been securely erased.\n", disk);
 }

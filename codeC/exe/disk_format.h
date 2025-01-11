@@ -2,9 +2,8 @@
 #define DISK_FORMAT_H
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <windows.h>
 
-void format_disk(const char *disk, const char *fs_choice);
+// Function to format a disk with the given filesystem
+int format_disk(const char *disk, const char *fs_choice);
 
-#endif /* DISK_FORMAT_H */
+#endif // DISK_FORMAT_H

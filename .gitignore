@@ -1,0 +1,5 @@
+#Ignore elf
+codeC/elf/disk_tool
+
+#Ignore exe
+codeC/exe/disk_tool.exe

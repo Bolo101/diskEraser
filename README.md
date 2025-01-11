@@ -1,3 +1,4 @@
+
 # Disk Eraser - Secure Disk Wiping and Formatting Tool
 
 **Disk Eraser** is a powerful tool for securely erasing data from hard drives or USB keys, while also providing the option to format the disk with a chosen file system (EXT4, NTFS, or VFAT). It can erase multiple disks in parallel, while ensuring that each disk is wiped thoroughly with random data, making it impossible to recover the erased data.
@@ -32,7 +33,7 @@ The project is designed to run inside a Docker container, as a bootable ISO, dir
 
 ## Installation and Usage
 
-### Using direct python3 code
+### Using the Python Code
 
 1. **Download repo**:
 ```bash
@@ -113,6 +114,22 @@ sudo dd if=secure_disk_eraser.iso of=/dev/sdX bs=4M status=progress
 
 ---
 
+## C Version (located in `/codeC/elf`)
+
+If you prefer to use the C version of the Disk Eraser tool, you can compile the C source files located in the `/codeC/elf` folder. This version is written in C and offers the same functionality.
+
+### Compile the C version
+
+To compile the C version, use the following command:
+
+```bash
+x86_64-w64-mingw32-gcc -o disk_tool.exe main.c disk_erase.c disk_partition.c disk_format.c utils.c -std=c11
+```
+
+This command will generate the `disk_tool.exe` executable. You can then run the executable directly on a Windows system.
+
+---
+
 ## ISO Download Links
 
 If you prefer not to build the ISO yourself, you can download the pre-built ISO files for your system from the following links:
@@ -157,6 +174,8 @@ project/
 │   ├── disk_partition.py       # Module for creating partitions
 │   ├── mainParse.py            # Main script with argument parsing
 │   └── utils.py                # Utility functions (e.g., disk listing)
+├── codeC/                      # C version of the tool
+│   └── elf                      # C source files for the tool
 ├── iso/                        # Files related to creating the bootable ISO
 │   └── forgeIso.sh             # Script to generate the bootable ISO
 ├── setup.sh                    # Script to install dependencies and prepare the project

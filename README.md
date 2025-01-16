@@ -123,7 +123,7 @@ If you prefer to use the C version of the Disk Eraser tool, you can compile the 
 To compile the C version, use the following command:
 
 ```bash
-x86_64-w64-mingw32-gcc -o disk_tool.exe main.c disk_erase.c disk_partition.c disk_format.c utils.c -std=c11
+gcc -o disk_tool main.c disk_erase.c disk_partition.c disk_format.c utils.c -std=c11
 ```
 
 This command will generate the `disk_tool.exe` executable. You can then run the executable directly on a Windows system.

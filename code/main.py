@@ -5,6 +5,25 @@ from disk_format import format_disk
 from utils import list_disks
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Thread
+from time import sleep
+import threading
+
+class DiskProgress:
+    def __init__(self, disk):
+        self.disk = disk
+        self.progress = 0
+        self.lock = threading.Lock()
+
+    def update_progress(self, value):
+        with self.lock:
+            self.progress = value
+
+    def display(self):
+        while self.progress < 100:
+            sleep(0.5)
+            with self.lock:
+                print(f"{self.disk}: {self.progress:.2f}% complete", end='\r')
 
 def select_disks():
     """
@@ -65,26 +84,33 @@ def process_disk(disk, fs_choice, passes):
     Erase, partition, and format a disk sequentially.
     """
     print(f"Starting operations on disk: {disk}")
+    disk_progress = DiskProgress(disk)
+    progress_thread = Thread(target=disk_progress.display)
+    progress_thread.start()
 
     try:
-        erase_disk(disk, passes)
+        erase_disk(disk, passes, disk_progress.update_progress)
     except Exception as e:
-        print(f"Error erasing disk {disk}: {e}")
+        print(f"\nError erasing disk {disk}: {e}")
         return
 
     try:
         partition_disk(disk)
     except Exception as e:
-        print(f"Error partitioning disk {disk}: {e}")
+        print(f"\nError partitioning disk {disk}: {e}")
         return
 
     try:
         format_disk(disk, fs_choice)
     except Exception as e:
-        print(f"Error formatting disk {disk}: {e}")
+        print(f"\nError formatting disk {disk}: {e}")
         return
 
-    print(f"Completed operations on disk: {disk}")
+    with disk_progress.lock:
+        disk_progress.progress = 100
+
+    progress_thread.join()
+    print(f"\nCompleted operations on disk: {disk}")
 
 def main(fs_choice=None, passes=7):
     disks = select_disks()
@@ -106,7 +132,10 @@ def main(fs_choice=None, passes=7):
         futures = [executor.submit(process_disk, disk, fs_choice, passes) for disk in confirmed_disks]
 
         for future in as_completed(futures):
-            future.result()
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing disk: {e}")
 
     print("All operations completed successfully.")
 

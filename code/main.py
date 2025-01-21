@@ -128,7 +128,7 @@ def _parse_args():
         '-p',
         help="Number of random data passes",
         type=int,
-        default=7,
+        default=6,
         required=False
     )
     return parser.parse_args()

@@ -1,29 +1,44 @@
 import os
+import sys
 from disk_erase import erase_disk
 from disk_partition import partition_disk
 from disk_format import format_disk
 from utils import list_disks
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Thread
-from time import sleep
+from concurrent.futures import ThreadPoolExecutor
 import threading
 
-class DiskProgress:
-    def __init__(self, disk):
-        self.disk = disk
-        self.progress = 0
+
+class ProgressManager:
+    """
+    Manages progress display for multiple disks.
+    """
+    def __init__(self, disks):
+        self.progress = {disk: 0 for disk in disks}
         self.lock = threading.Lock()
+        self.disks = disks
 
-    def update_progress(self, value):
-        with self.lock:
-            self.progress = value
+    def update_progress(self, disk, value):
+        """
+        Update progress for a specific disk.
+        """
+        with self.lock:  # Automatically acquires and releases the lock
+            self.progress[disk] = value
+            self.display_progress()
 
-    def display(self):
-        while self.progress < 100:
-            sleep(0.5)
-            with self.lock:
-                print(f"{self.disk}: {self.progress:.2f}% complete", end='\r')
+    def display_progress(self):
+        """
+        Render the progress for all disks.
+        """
+        sys.stdout.write("\033[H\033[J")  # Clear the terminal
+        for disk in self.disks:
+            progress = self.progress[disk]
+            bar_length = 50
+            filled_length = int(bar_length * progress / 100)
+            bar = "=" * filled_length + "-" * (bar_length - filled_length)
+            sys.stdout.write(f"{disk}: [{bar}] {progress:.2f}%\n")
+        sys.stdout.flush()
+
 
 def select_disks():
     """
@@ -34,6 +49,7 @@ def select_disks():
         "Enter the disks to erase (comma-separated, e.g., sda,sdb): "
     ).strip()
     return [disk.strip() for disk in selected_disks.split(",") if disk.strip()]
+
 
 def choose_filesystem():
     """
@@ -55,6 +71,7 @@ def choose_filesystem():
         else:
             print("Invalid choice. Please select a correct option.")
 
+
 def confirm_erasure(disk):
     """
     Display a confirmation prompt before erasing the disk.
@@ -66,6 +83,7 @@ def confirm_erasure(disk):
         if confirmation in {"y", "n"}:
             return confirmation == "y"
         print("Invalid input. Please enter 'y' or 'n'.")
+
 
 def get_disk_confirmations(disks):
     """
@@ -79,17 +97,13 @@ def get_disk_confirmations(disks):
             print(f"Skipping disk: {disk}")
     return confirmed_disks
 
-def process_disk(disk, fs_choice, passes):
+
+def process_disk(disk, fs_choice, passes, progress_manager):
     """
     Erase, partition, and format a disk sequentially.
     """
-    print(f"Starting operations on disk: {disk}")
-    disk_progress = DiskProgress(disk)
-    progress_thread = Thread(target=disk_progress.display)
-    progress_thread.start()
-
     try:
-        erase_disk(disk, passes, disk_progress.update_progress)
+        erase_disk(disk, passes, lambda value: progress_manager.update_progress(disk, value))
     except Exception as e:
         print(f"\nError erasing disk {disk}: {e}")
         return
@@ -106,11 +120,8 @@ def process_disk(disk, fs_choice, passes):
         print(f"\nError formatting disk {disk}: {e}")
         return
 
-    with disk_progress.lock:
-        disk_progress.progress = 100
+    progress_manager.update_progress(disk, 100)
 
-    progress_thread.join()
-    print(f"\nCompleted operations on disk: {disk}")
 
 def main(fs_choice=None, passes=7):
     disks = select_disks()
@@ -126,18 +137,20 @@ def main(fs_choice=None, passes=7):
     if not fs_choice:
         fs_choice = choose_filesystem()
 
+    progress_manager = ProgressManager(confirmed_disks)
     print("All disks confirmed for erasure. Starting the operation...\n")
 
     with ThreadPoolExecutor() as executor:
-        futures = [executor.submit(process_disk, disk, fs_choice, passes) for disk in confirmed_disks]
+        futures = [
+            executor.submit(process_disk, disk, fs_choice, passes, progress_manager)
+            for disk in confirmed_disks
+        ]
 
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                print(f"Error processing disk: {e}")
+        for future in futures:
+            future.result()
 
     print("All operations completed successfully.")
+
 
 def sudo_check(args):
     if os.geteuid() != 0:
@@ -145,12 +158,13 @@ def sudo_check(args):
     else:
         main(args.f, args.p)
 
+
 def _parse_args():
     parser = ArgumentParser(description="Secure Disk Eraser Tool")
     parser.add_argument(
-        '-f', 
+        '-f',
         help="Filesystem type (ext4, ntfs, vfat)",
-        choices=['ext4', 'ntfs', 'vfat'], 
+        choices=['ext4', 'ntfs', 'vfat'],
         required=False
     )
     parser.add_argument(
@@ -162,9 +176,11 @@ def _parse_args():
     )
     return parser.parse_args()
 
+
 def app():
     args = _parse_args()
     sudo_check(args)
+
 
 if __name__ == "__main__":
     app()

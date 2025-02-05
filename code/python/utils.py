@@ -29,3 +29,23 @@ def list_disks():
     except subprocess.CalledProcessError:
         logging.error("Error: Failed to retrieve disk information.")
         sys.exit(1)
+
+def choose_filesystem():
+    """
+    Prompt the user to choose a filesystem.
+    """
+    while True:
+        print("Choose a filesystem to format the disks:")
+        print("1. NTFS")
+        print("2. EXT4")
+        print("3. VFAT")
+        choice = input("Enter your choice (1, 2, or 3): ").strip()
+
+        if choice == "1":
+            return "ntfs"
+        elif choice == "2":
+            return "ext4"
+        elif choice == "3":
+            return "vfat"
+        else:
+            print("Invalid choice. Please select a correct option.")

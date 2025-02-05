@@ -3,6 +3,7 @@
 import os
 import sys
 import logging
+from subprocess import CalledProcessError
 from disk_erase import erase_disk
 from disk_partition import partition_disk
 from disk_format import format_disk
@@ -35,7 +36,7 @@ def process_disk(disk, fs_choice, passes):
         partition_disk(disk)
         format_disk(disk, fs_choice)
         logging.info(f"Completed operations on disk: {disk}")
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except (FileNotFoundError, CalledProcessError):
         logging.info(f"Error processing disk {disk}.")
     
 def main(fs_choice, passes):

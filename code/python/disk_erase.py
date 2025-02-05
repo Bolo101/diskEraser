@@ -4,7 +4,7 @@ import sys
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def is_ssd(device):
+def is_ssd(device: str) -> bool:
     try:
         output = subprocess.run(
             ["cat", f"/sys/block/{device}/queue/rotational"],
@@ -21,8 +21,12 @@ def is_ssd(device):
         sys.exit(1)
     return False
 
-def erase_disk(device, passes):
+def erase_disk(device: str, passes: int) -> None:
     try:
+        # Type-casting arguments to ensure correct types
+        device = str(device)
+        passes = int(passes)
+
         if is_ssd(device):
             logging.info(f"Warning: {device} appears to be an SSD. Use `hdparm` for secure erase.")
             return

@@ -5,7 +5,7 @@ import sys
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def format_disk(disk, fs_choice):
+def format_disk(disk: str, fs_choice: str) -> None:
     partition = f"/dev/{disk}1"
     
     try:

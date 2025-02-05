@@ -5,7 +5,7 @@ from subprocess import CalledProcessError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def partition_disk(disk):
+def partition_disk(disk: str) -> None:
     logging.info(f"Partitioning disk {disk}...")
 
     try:

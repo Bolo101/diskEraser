@@ -6,6 +6,8 @@ from tkinter import ttk, messagebox
 from subprocess import CalledProcessError, SubprocessError
 from disk_erase import get_disk_serial, is_ssd
 from utils import get_disk_list, get_base_disk
+from disk_partition import partition_disk
+from disk_format import format_disk
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from log_handler import log_info, log_error, log_erase_operation, session_start, session_end, generate_session_pdf, generate_log_file_pdf
 from disk_operations import get_active_disk, process_disk
@@ -112,7 +114,6 @@ class DiskEraserGUI:
         
         # Crypto fill method options (for crypto method)
         self.crypto_fill_frame = ttk.LabelFrame(options_frame, text="Fill Method (Crypto)")
-        # Initially hidden, will be shown when crypto method is selected
         
         fill_methods = [("Random Data", "random"), ("Zero Data", "zero")]
         for text, value in fill_methods:
@@ -134,7 +135,11 @@ class DiskEraserGUI:
         
         # Start button
         start_button = ttk.Button(options_frame, text="Start Erasure", command=self.start_erasure)
-        start_button.pack(pady=20, padx=10, fill=tk.X)
+        start_button.pack(pady=10, padx=10, fill=tk.X)
+        
+        # Format only button
+        format_button = ttk.Button(options_frame, text="Format Only (No Erase)", command=self.format_only)
+        format_button.pack(pady=5, padx=10, fill=tk.X)
 
         # Print log buttons frame
         log_buttons_frame = ttk.Frame(options_frame)
@@ -142,13 +147,17 @@ class DiskEraserGUI:
         
         # Print session log button
         print_session_button = ttk.Button(log_buttons_frame, text="Print Session Log", 
-                                         command=self.print_session_log)
+                                        command=self.print_session_log)
         print_session_button.pack(side=tk.TOP, pady=5, padx=10, fill=tk.X, expand=True)
         
         # Print complete log button
         print_log_button = ttk.Button(log_buttons_frame, text="Print Complete Log", 
-                                     command=self.print_complete_log)
+                                    command=self.print_complete_log)
         print_log_button.pack(side=tk.BOTTOM, pady=5, padx=10, fill=tk.X, expand=True)
+
+        # Power off button
+        poweroff_button = ttk.Button(options_frame, text="Power Off System", command=self.power_off_system)
+        poweroff_button.pack(pady=5, padx=10, fill=tk.X)
 
         # Exit program button
         close_button = ttk.Button(options_frame, text="Exit", command=self.exit_application)
@@ -182,6 +191,267 @@ class DiskEraserGUI:
         
         # Initial method options update
         self.update_method_options()
+
+    def format_only(self) -> None:
+        """Format selected disks without erasing them first."""
+        # Get selected disks
+        selected_disks = [disk for disk, var in self.disk_vars.items() if var.get()]
+        
+        if not selected_disks:
+            messagebox.showwarning("Warning", "No disks selected!")
+            return
+        
+        # Get disk identifiers
+        disk_identifiers = []
+        for disk in selected_disks:
+            disk_name = disk.replace('/dev/', '')
+            try:
+                disk_identifier = get_disk_serial(disk_name)
+            except (CalledProcessError, SubprocessError) as e:
+                disk_identifier = f"{disk_name} (Serial unavailable)"
+                error_msg = f"Error getting serial for {disk_name}: {str(e)}"
+                self.update_gui_log(error_msg)
+                log_error(error_msg)
+            except FileNotFoundError as e:
+                disk_identifier = f"{disk_name} (Serial command not found)"
+                error_msg = f"Required command not found for getting serial of {disk_name}: {str(e)}"
+                self.update_gui_log(error_msg)
+                log_error(error_msg)
+            except PermissionError as e:
+                disk_identifier = f"{disk_name} (Permission denied)"
+                error_msg = f"Permission denied getting serial for {disk_name}: {str(e)}"
+                self.update_gui_log(error_msg)
+                log_error(error_msg)
+            except (IOError, OSError) as e:
+                disk_identifier = f"{disk_name} (IO error)"
+                error_msg = f"IO error getting serial for {disk_name}: {str(e)}"
+                self.update_gui_log(error_msg)
+                log_error(error_msg)
+                
+            disk_identifiers.append(disk_identifier)
+        
+        # Confirm formatting
+        disk_list = "\n".join(disk_identifiers)
+        fs_choice = self.filesystem_var.get()
+        
+        if not messagebox.askyesno("Confirm Format", 
+                                f"WARNING: You are about to format the following disks as {fs_choice}:\n\n{disk_list}\n\n"
+                                "All existing data will be lost!\n\n"
+                                "Do you want to continue?"):
+            return
+        
+        # Start formatting in a separate thread
+        self.status_var.set("Starting format process...")
+        try:
+            threading.Thread(target=self.format_disks_thread, args=(selected_disks, fs_choice), daemon=True).start()
+        except RuntimeError as e:
+            error_msg = f"Error starting format thread: {str(e)}"
+            messagebox.showerror("Thread Error", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            self.status_var.set("Ready")
+        except OSError as e:
+            error_msg = f"System error starting format process: {str(e)}"
+            messagebox.showerror("System Error", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            self.status_var.set("Ready")
+
+
+    def format_disks_thread(self, disks, fs_choice):
+        """Thread function to format disks."""
+        start_msg = f"Starting format of {len(disks)} disk(s) as {fs_choice}"
+        self.update_gui_log(start_msg)
+        log_info(start_msg)
+        
+        total_disks = len(disks)
+        completed_disks = 0
+        
+        try:
+            with ThreadPoolExecutor() as executor:
+                futures = {executor.submit(self.format_single_disk, disk, fs_choice): disk for disk in disks}
+                
+                for future in as_completed(futures):
+                    disk = futures[future]
+                    try:
+                        future.result()
+                        completed_disks += 1
+                        self.update_progress((completed_disks / total_disks) * 100)
+                        self.status_var.set(f"Formatted {completed_disks}/{total_disks} disks")
+                    except (CalledProcessError, FileNotFoundError, PermissionError, OSError) as e:
+                        error_msg = f"Error formatting disk {disk}: {str(e)}"
+                        self.update_gui_log(error_msg)
+                        log_error(error_msg)
+                    except KeyboardInterrupt:
+                        error_msg = "Format operation interrupted by user"
+                        self.update_gui_log(error_msg)
+                        log_error(error_msg)
+                    except MemoryError:
+                        error_msg = f"Insufficient memory while formatting disk {disk}"
+                        self.update_gui_log(error_msg)
+                        log_error(error_msg)
+                    except RuntimeError as e:
+                        error_msg = f"Runtime error formatting disk {disk}: {str(e)}"
+                        self.update_gui_log(error_msg)
+                        log_error(error_msg)
+                    except (ValueError, TypeError) as e:
+                        error_msg = f"Invalid data error formatting disk {disk}: {str(e)}"
+                        self.update_gui_log(error_msg)
+                        log_error(error_msg)
+        
+        except RuntimeError as e:
+            error_msg = f"Error with thread pool executor during format: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        except OSError as e:
+            error_msg = f"System error during disk formatting: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        except MemoryError:
+            error_msg = "Insufficient memory for format thread pool operations"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        
+        complete_msg = "Format process completed"
+        self.status_var.set(complete_msg)
+        log_info(complete_msg)
+        try:
+            messagebox.showinfo("Complete", "Disk formatting operation has completed!")
+        except tk.TclError as e:
+            error_msg = f"Error showing completion dialog: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+
+
+    def format_single_disk(self, disk, fs_choice):
+        """Format a single disk."""
+        disk_name = disk.replace('/dev/', '')
+        
+        try:
+            disk_id = get_disk_serial(disk_name)
+            self.status_var.set(f"Formatting {disk_id}...")
+            log_info(f"Formatting {disk_id} as {fs_choice}")
+        except (CalledProcessError, SubprocessError) as e:
+            self.update_gui_log(f"Error getting disk serial: {str(e)}")
+            self.status_var.set(f"Formatting {disk_name}...")
+            log_info(f"Formatting {disk_name} as {fs_choice}")
+        except FileNotFoundError as e:
+            self.update_gui_log(f"Required command not found: {str(e)}")
+            self.status_var.set(f"Formatting {disk_name}...")
+            log_info(f"Formatting {disk_name} as {fs_choice}")
+        except PermissionError as e:
+            self.update_gui_log(f"Permission error: {str(e)}")
+            self.status_var.set(f"Formatting {disk_name}...")
+            log_info(f"Formatting {disk_name} as {fs_choice}")
+        except (IOError, OSError) as e:
+            self.update_gui_log(f"OS/IO error: {str(e)}")
+            self.status_var.set(f"Formatting {disk_name}...")
+            log_info(f"Formatting {disk_name} as {fs_choice}")
+        
+        try:
+            # Partition the disk first
+            partition_disk(disk_name)
+            self.update_gui_log(f"Partitioned {disk_name}")
+            
+            # Format the partition using the existing format_disk function
+            format_disk(disk_name, fs_choice)
+            self.update_gui_log(f"Successfully formatted {disk_name} as {fs_choice}")
+            log_info(f"Successfully formatted {disk_name} as {fs_choice}")
+            
+        except CalledProcessError as e:
+            error_msg = f"Command execution error formatting {disk_name}: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            raise
+        except FileNotFoundError as e:
+            error_msg = f"Required command not found for formatting {disk_name}: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            raise
+        except PermissionError as e:
+            error_msg = f"Permission denied formatting {disk_name}: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            raise
+        except (IOError, OSError) as e:
+            error_msg = f"IO/System error formatting {disk_name}: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            raise
+        except MemoryError:
+            error_msg = f"Insufficient memory while formatting {disk_name}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            raise
+        except (ValueError, TypeError) as e:
+            error_msg = f"Invalid parameter for formatting {disk_name}: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            raise
+        except RuntimeError as e:
+            error_msg = f"Runtime error formatting {disk_name}: {str(e)}"
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+            raise
+
+
+    def power_off_system(self) -> None:
+        """Power off the system after confirmation."""
+        import subprocess
+        
+        if not messagebox.askyesno("Confirm Power Off", 
+                                "Are you sure you want to power off the system?\n\n"
+                                "All unsaved work will be lost!"):
+            return
+        
+        # Double confirmation
+        if not messagebox.askyesno("FINAL WARNING", 
+                                "This will shut down the computer immediately.\n\n"
+                                "Do you want to proceed?"):
+            return
+        
+        try:
+            log_info("System power off initiated by user")
+            self.update_gui_log("Powering off system...")
+            session_end()
+            
+            # Give a moment for logs to be written
+            import time
+            time.sleep(1)
+            
+            # Execute poweroff command
+            subprocess.run(["poweroff"], check=True)
+            
+        except subprocess.CalledProcessError as e:
+            error_msg = f"Error executing poweroff command: {str(e)}"
+            messagebox.showerror("Power Off Error", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        except FileNotFoundError:
+            error_msg = "Poweroff command not found. Try 'shutdown -h now' manually."
+            messagebox.showerror("Command Not Found", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        except PermissionError:
+            error_msg = "Permission denied. Root privileges required for poweroff."
+            messagebox.showerror("Permission Error", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        except (IOError, OSError) as e:
+            error_msg = f"System error during poweroff: {str(e)}"
+            messagebox.showerror("System Error", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        except MemoryError:
+            error_msg = "Insufficient memory to execute poweroff"
+            messagebox.showerror("Memory Error", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
+        except (ValueError, TypeError) as e:
+            error_msg = f"Invalid data during poweroff: {str(e)}"
+            messagebox.showerror("Data Error", error_msg)
+            self.update_gui_log(error_msg)
+            log_error(error_msg)
     
     def print_session_log(self) -> None:
         """Generate and save session log as PDF"""

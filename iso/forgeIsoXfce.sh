@@ -4,7 +4,7 @@
 set -e
 
 # Variables
-ISO_NAME="$(pwd)/diskEraser-v5.3.iso"
+ISO_NAME="$(pwd)/diskEraser-v5.4.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../code"
 
@@ -52,6 +52,7 @@ calamares-settings-debian
 squashfs-tools
 xorg
 xfce4
+xfce4-power-manager
 network-manager
 network-manager-gnome
 sudo
@@ -92,6 +93,100 @@ CHARMAP="UTF-8"
 CODESET="Lat15"
 XKBLAYOUT="fr"
 XKBVARIANT="azerty"
+EOF
+
+# Disable all power management and suspend features
+echo "Disabling power management and suspend..."
+mkdir -p config/includes.chroot/etc/systemd/logind.conf.d/
+cat << EOF > config/includes.chroot/etc/systemd/logind.conf.d/no-suspend.conf
+[Login]
+HandleSuspendKey=ignore
+HandleHibernateKey=ignore
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+EOF
+
+# Disable systemd sleep targets
+mkdir -p config/includes.chroot/etc/systemd/sleep.conf.d/
+cat << EOF > config/includes.chroot/etc/systemd/sleep.conf.d/no-sleep.conf
+[Sleep]
+AllowSuspend=no
+AllowHibernation=no
+AllowSuspendThenHibernate=no
+AllowHybridSleep=no
+EOF
+
+# Create systemd override to mask suspend/hibernate targets
+mkdir -p config/includes.chroot/etc/systemd/system/sleep.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/sleep.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+mkdir -p config/includes.chroot/etc/systemd/system/suspend.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/suspend.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+mkdir -p config/includes.chroot/etc/systemd/system/hibernate.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/hibernate.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+mkdir -p config/includes.chroot/etc/systemd/system/hybrid-sleep.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/hybrid-sleep.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+# Configure XFCE Power Manager to never suspend
+mkdir -p config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/
+cat << 'EOF' > config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-power-manager" version="1.0">
+  <property name="xfce4-power-manager" type="empty">
+    <property name="power-button-action" type="uint" value="3"/>
+    <property name="show-tray-icon" type="bool" value="true"/>
+    <property name="logind-handle-lid-switch" type="bool" value="false"/>
+    <property name="dpms-enabled" type="bool" value="false"/>
+    <property name="blank-on-ac" type="int" value="0"/>
+    <property name="blank-on-battery" type="int" value="0"/>
+    <property name="dpms-on-ac-sleep" type="uint" value="0"/>
+    <property name="dpms-on-ac-off" type="uint" value="0"/>
+    <property name="dpms-on-battery-sleep" type="uint" value="0"/>
+    <property name="dpms-on-battery-off" type="uint" value="0"/>
+    <property name="brightness-on-ac" type="uint" value="9"/>
+    <property name="brightness-on-battery" type="uint" value="9"/>
+    <property name="inactivity-on-ac" type="uint" value="0"/>
+    <property name="inactivity-on-battery" type="uint" value="0"/>
+    <property name="inactivity-sleep-mode-on-ac" type="uint" value="1"/>
+    <property name="inactivity-sleep-mode-on-battery" type="uint" value="1"/>
+    <property name="lid-action-on-ac" type="uint" value="0"/>
+    <property name="lid-action-on-battery" type="uint" value="0"/>
+    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>
+    <property name="critical-power-action" type="uint" value="1"/>
+  </property>
+</channel>
+EOF
+
+# Disable screen blanking and DPMS
+mkdir -p config/includes.chroot/etc/X11/xorg.conf.d/
+cat << EOF > config/includes.chroot/etc/X11/xorg.conf.d/10-monitor.conf
+Section "ServerFlags"
+    Option "BlankTime" "0"
+    Option "StandbyTime" "0"
+    Option "SuspendTime" "0"
+    Option "OffTime" "0"
+EndSection
+
+Section "Monitor"
+    Identifier "LVDS0"
+    Option "DPMS" "false"
+EndSection
 EOF
 
 # Copy all files from CODE_DIR to /usr/local/bin
@@ -243,4 +338,4 @@ mv live-image-amd64.hybrid.iso "$ISO_NAME"
 # Cleanup
 sudo lb clean
 
-echo "Done."
+echo "Done. ISO created at: $ISO_NAME"

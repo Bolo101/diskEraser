@@ -4,7 +4,7 @@
 set -e
 
 # Variables
-ISO_NAME="$(pwd)/diskEraserKde-v5.3.iso"
+ISO_NAME="$(pwd)/diskEraserKde-v5.4.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../code"
 
@@ -93,6 +93,92 @@ CHARMAP="UTF-8"
 CODESET="Lat15"
 XKBLAYOUT="fr"
 XKBVARIANT="azerty"
+EOF
+
+# Disable all power management and suspend features
+echo "Disabling power management and suspend..."
+mkdir -p config/includes.chroot/etc/systemd/logind.conf.d/
+cat << EOF > config/includes.chroot/etc/systemd/logind.conf.d/no-suspend.conf
+[Login]
+HandleSuspendKey=ignore
+HandleHibernateKey=ignore
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+HandleLidSwitchDocked=ignore
+IdleAction=ignore
+EOF
+
+# Disable systemd sleep targets
+mkdir -p config/includes.chroot/etc/systemd/sleep.conf.d/
+cat << EOF > config/includes.chroot/etc/systemd/sleep.conf.d/no-sleep.conf
+[Sleep]
+AllowSuspend=no
+AllowHibernation=no
+AllowSuspendThenHibernate=no
+AllowHybridSleep=no
+EOF
+
+# Create systemd override to mask suspend/hibernate targets
+mkdir -p config/includes.chroot/etc/systemd/system/sleep.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/sleep.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+mkdir -p config/includes.chroot/etc/systemd/system/suspend.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/suspend.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+mkdir -p config/includes.chroot/etc/systemd/system/hibernate.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/hibernate.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+mkdir -p config/includes.chroot/etc/systemd/system/hybrid-sleep.target.d/
+cat << EOF > config/includes.chroot/etc/systemd/system/hybrid-sleep.target.d/override.conf
+[Unit]
+ConditionPathExists=/dev/null
+EOF
+
+# Configure KDE Power Management to never suspend
+mkdir -p config/includes.chroot/etc/xdg
+cat << 'EOF' > config/includes.chroot/etc/xdg/powerdevilrc
+[General]
+chargeStartThreshold=0
+chargeStopThreshold=0
+
+[AC]
+BrightnessControl=0
+BrightnessControlBehavior=0
+DPMSControlBehavior=0
+PowerButtonAction=1
+SuspendSession=-1
+
+[Battery]
+BrightnessControl=0
+BrightnessControlBehavior=0
+DPMSControlBehavior=0
+PowerButtonAction=1
+SuspendSession=-1
+EOF
+
+# Disable screen blanking and DPMS
+mkdir -p config/includes.chroot/etc/X11/xorg.conf.d/
+cat << EOF > config/includes.chroot/etc/X11/xorg.conf.d/10-monitor.conf
+Section "ServerFlags"
+    Option "BlankTime" "0"
+    Option "StandbyTime" "0"
+    Option "SuspendTime" "0"
+    Option "OffTime" "0"
+EndSection
+
+Section "Monitor"
+    Identifier "LVDS0"
+    Option "DPMS" "false"
+EndSection
 EOF
 
 # Copy all files from CODE_DIR to /usr/local/bin
@@ -244,4 +330,4 @@ mv live-image-amd64.hybrid.iso "$ISO_NAME"
 # Cleanup
 sudo lb clean
 
-echo "Done."
+echo "Done. ISO created at: $ISO_NAME"

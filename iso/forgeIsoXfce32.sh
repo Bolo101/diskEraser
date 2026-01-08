@@ -4,7 +4,7 @@
 set -e
 
 # Variables
-ISO_NAME="$(pwd)/diskEraser-v5.4.iso"
+ISO_NAME="$(pwd)/diskEraser-v5.4-32bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../code"
 
@@ -22,8 +22,8 @@ cd "$WORK_DIR"
 sudo lb clean
 
 # Configure live-build
-echo "Configuring live-build for Debian Bookworm..."
-lb config --distribution=bookworm --architectures=amd64 \
+echo "Configuring live-build for Debian Bookworm (32-bit)..."
+lb config --distribution=bookworm --architectures=i386 \
     --linux-packages=linux-image \
     --debian-installer=live \
     --bootappend-live="boot=live components hostname=secure-eraser username=user locales=fr_FR.UTF-8 keyboard-layouts=fr"
@@ -333,7 +333,7 @@ echo "Building the ISO..."
 sudo lb build
 
 # Move the ISO
-mv live-image-amd64.hybrid.iso "$ISO_NAME"
+mv live-image-i386.hybrid.iso "$ISO_NAME"
 
 # Cleanup
 sudo lb clean

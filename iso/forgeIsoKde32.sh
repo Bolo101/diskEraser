@@ -4,7 +4,7 @@
 set -e
 
 # Variables
-ISO_NAME="$(pwd)/diskEraser-v5.4.iso"
+ISO_NAME="$(pwd)/diskEraserKde-v5.4-32bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../code"
 
@@ -22,8 +22,8 @@ cd "$WORK_DIR"
 sudo lb clean
 
 # Configure live-build
-echo "Configuring live-build for Debian Bookworm..."
-lb config --distribution=bookworm --architectures=amd64 \
+echo "Configuring live-build for Debian Bookworm (32-bit)..."
+lb config --distribution=bookworm --architectures=i386 \
     --linux-packages=linux-image \
     --debian-installer=live \
     --bootappend-live="boot=live components hostname=secure-eraser username=user locales=fr_FR.UTF-8 keyboard-layouts=fr"
@@ -51,10 +51,10 @@ calamares
 calamares-settings-debian
 squashfs-tools
 xorg
-xfce4
-xfce4-power-manager
-network-manager
-network-manager-gnome
+kde-plasma-desktop
+kde-standard
+plasma-nm
+sddm
 sudo
 evince
 live-boot
@@ -143,34 +143,26 @@ cat << EOF > config/includes.chroot/etc/systemd/system/hybrid-sleep.target.d/ove
 ConditionPathExists=/dev/null
 EOF
 
-# Configure XFCE Power Manager to never suspend
-mkdir -p config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/
-cat << 'EOF' > config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfce4-power-manager" version="1.0">
-  <property name="xfce4-power-manager" type="empty">
-    <property name="power-button-action" type="uint" value="3"/>
-    <property name="show-tray-icon" type="bool" value="true"/>
-    <property name="logind-handle-lid-switch" type="bool" value="false"/>
-    <property name="dpms-enabled" type="bool" value="false"/>
-    <property name="blank-on-ac" type="int" value="0"/>
-    <property name="blank-on-battery" type="int" value="0"/>
-    <property name="dpms-on-ac-sleep" type="uint" value="0"/>
-    <property name="dpms-on-ac-off" type="uint" value="0"/>
-    <property name="dpms-on-battery-sleep" type="uint" value="0"/>
-    <property name="dpms-on-battery-off" type="uint" value="0"/>
-    <property name="brightness-on-ac" type="uint" value="9"/>
-    <property name="brightness-on-battery" type="uint" value="9"/>
-    <property name="inactivity-on-ac" type="uint" value="0"/>
-    <property name="inactivity-on-battery" type="uint" value="0"/>
-    <property name="inactivity-sleep-mode-on-ac" type="uint" value="1"/>
-    <property name="inactivity-sleep-mode-on-battery" type="uint" value="1"/>
-    <property name="lid-action-on-ac" type="uint" value="0"/>
-    <property name="lid-action-on-battery" type="uint" value="0"/>
-    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>
-    <property name="critical-power-action" type="uint" value="1"/>
-  </property>
-</channel>
+# Configure KDE Power Management to never suspend
+mkdir -p config/includes.chroot/etc/xdg
+cat << 'EOF' > config/includes.chroot/etc/xdg/powerdevilrc
+[General]
+chargeStartThreshold=0
+chargeStopThreshold=0
+
+[AC]
+BrightnessControl=0
+BrightnessControlBehavior=0
+DPMSControlBehavior=0
+PowerButtonAction=1
+SuspendSession=-1
+
+[Battery]
+BrightnessControl=0
+BrightnessControlBehavior=0
+DPMSControlBehavior=0
+PowerButtonAction=1
+SuspendSession=-1
 EOF
 
 # Disable screen blanking and DPMS
@@ -243,7 +235,7 @@ EOF
 # Make the launcher executable
 chmod +x config/includes.chroot/usr/share/applications/secure_disk_eraser.desktop
 
-# Auto-start in live mode - Create XFCE autostart
+# Auto-start in live mode - Create KDE Plasma autostart
 mkdir -p config/includes.chroot/etc/xdg/autostart/
 cat << EOF > config/includes.chroot/etc/xdg/autostart/disk-eraser.desktop
 [Desktop Entry]
@@ -254,7 +246,7 @@ Exec=sudo /usr/local/bin/de
 Terminal=true
 Icon=drive-harddisk
 Categories=System;Security;
-OnlyShowIn=XFCE;
+OnlyShowIn=KDE;
 EOF
 
 # Configure .bashrc to run main.py on login in live mode but not in installed mode
@@ -333,7 +325,7 @@ echo "Building the ISO..."
 sudo lb build
 
 # Move the ISO
-mv live-image-amd64.hybrid.iso "$ISO_NAME"
+mv live-image-i386.hybrid.iso "$ISO_NAME"
 
 # Cleanup
 sudo lb clean

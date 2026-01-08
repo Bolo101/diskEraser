@@ -7,9 +7,17 @@ import time
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def format_disk(disk: str, fs_choice: str) -> None:
+    """
+    Format a disk partition with the specified filesystem.
+    Handles both NVMe and standard disk partition naming.
+    """
     # Make sure we're working with just the device name without /dev/
     disk_name = disk.replace('/dev/', '')
-    partition = f"/dev/{disk_name}1"
+    
+    # Get the correct partition name (handles NVMe vs standard disks)
+    from disk_partition import get_partition_name
+    partition_name = get_partition_name(disk_name)
+    partition = f"/dev/{partition_name}"
     
     # Wait briefly for the partition to be recognized by the system
     logging.info(f"Waiting for partition {partition} to be recognized...")

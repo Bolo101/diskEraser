@@ -10,10 +10,7 @@ CODE_DIR="$(pwd)/../../code"
 
 echo "Installing live-build and required dependencies..."
 sudo apt update
-sudo apt install -y live-build python3 calamares calamares-settings-debian syslinux isolinux osinfo-db osinfo-db-tools
-
-echo "Updating osinfo database for libvirt..."
-sudo osinfo-db-import --local --latest
+sudo apt install -y live-build python3 calamares calamares-settings-debian syslinux isolinux
 
 echo "Setting up live-build workspace..."
 rm -rf "$WORK_DIR"
@@ -72,8 +69,6 @@ keyboard-configuration
 cryptsetup
 dmsetup
 systemd
-osinfo-db
-osinfo-db-tools
 xserver-xorg-video-all
 xserver-xorg-video-intel
 xserver-xorg-video-ati
@@ -222,7 +217,7 @@ Name=Secure Disk Eraser
 Comment=Securely erase disks and partitions
 Exec=sudo /usr/local/bin/de
 Icon=drive-harddisk
-Terminal=true
+Terminal=false
 Type=Application
 Categories=System;Security;
 Keywords=disk;erase;secure;wipe;
@@ -235,7 +230,7 @@ Type=Application
 Name=Disk Eraser
 Comment=Start Disk Eraser automatically in live mode
 Exec=sudo /usr/local/bin/de
-Terminal=true
+Terminal=false
 Icon=drive-harddisk
 Categories=System;Security;
 OnlyShowIn=XFCE;
@@ -252,8 +247,10 @@ echo "Type 'sudo de' to use the Secure Disk Eraser program"
 
 if grep -q "boot=live" /proc/cmdline; then
   if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Live mode detected. Starting disk eraser..."
-    sudo /usr/local/bin/de
+    echo "Live mode detected. Starting Secure Disk Eraser..."
+    sudo /usr/local/bin/de &
+    sleep 2
+    exit 0
   fi
 fi
 EOF

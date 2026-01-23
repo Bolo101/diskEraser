@@ -4,7 +4,7 @@
 set -e
 
 # ISO name and working directory
-ISO_NAME="$(pwd)/diskEraser-v5.4-KDE.iso"
+ISO_NAME="$(pwd)/diskEraser-v5.4-KDE-64bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../../code"
 

@@ -137,20 +137,31 @@ sudo diskeraser --cli     # CLI mode
 ### Using Bootable ISO 💿
 
 1. **Create or download ISO**:
-   - Create XFCE based iso:
-   
-   ```bash
-   cd diskEraser/iso && make
-   ```
 
-   - Create KDE based iso:
+    - **Create iso**:
 
-   ```bash
-   cd diskEraser/iso && make kde
-   ```
-   - Pre-built ISO
+    Select ISO version you need, 32 bits or 64 bits, XFCE (lighter) or KDE. 
 
-   Download pre-built: [Disk Eraser ISO v5.3](https://archive.org/details/diskEraser-v5.4)
+    ```bash
+    cd iso/
+    make
+    make xfce32  # 32 bits XFCE environment (lighter)
+    make kde     # KDE 64 bits environment
+    make kde32   # KDE 32 bits environment
+    make all-iso # All 4 ISOs generated
+    make clean   # Clean build files
+    make help    # Display helper message
+    ```
+    - **Pre-built ISO**
+
+    Download pre-built: [Disk Eraser ISO v5.4](https://archive.org/details/diskEraser-v5.4)
+
+      ```txt
+      79ecba690af4f888c53cfb5852fbd194af1f3679460f31a7b82d396da74f5356  diskEraser-v5.4-KDE-32bits.iso
+      fd583c18ae4dcdc0ca7c75e96d6bcfc02f82f9e42e0b43a1bdf21c1d0b9f2f4d  diskEraser-v5.4-KDE-64bits.iso
+      48ba303f98f6e63a35b3eec67e5c63aa1441976137b2175a081afb88725ba1b3  diskEraser-v5.4-XFCE-32bits.iso
+      254ba9b122c37c304e7c6ce9f89e8200bf5ce07193bea696a4885b40dfe65455  diskEraser-v5.4-XFCE-64bits.iso
+      ```
 
 2. **Flash to USB**:
    ```bash

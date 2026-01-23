@@ -87,6 +87,7 @@ sudo systemctl restart systemd-udevd
 - **Parallel Processing**: Erases multiple disks simultaneously
 - **Post-Erasure Setup**: Automatic partitioning and formatting
 - **Flexible Formats**: Supports NTFS, EXT4, and VFAT file systems
+- **Format-only capacity** : Solely format disk in selected format without data erasure
 - **Multiple Deployment Options**: Run as Python code, Linux command, or bootable ISO
 - **Improved disks listing format in GUI mode**: Prompts useful data about disks detected
 - **Comprehensive Logging System**:
@@ -149,7 +150,7 @@ sudo diskeraser --cli     # CLI mode
    ```
    - Pre-built ISO
 
-   Download pre-built: [Disk Eraser ISO v5.3](https://archive.org/download/diskEraser-v5.3/diskEraser-v5.3.iso)
+   Download pre-built: [Disk Eraser ISO v5.3](https://archive.org/details/diskEraser-v5.4)
 
 2. **Flash to USB**:
    ```bash

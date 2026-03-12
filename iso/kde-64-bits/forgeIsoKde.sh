@@ -21,7 +21,7 @@ sudo lb clean --purge || true
 
 echo "Configuring live-build for Debian Bullseye amd64..."
 lb config \
-  --distribution=bullseye \
+  --distribution=bookworm \
   --architectures=amd64 \
   --linux-packages=linux-image \
   --debian-installer=live \
@@ -32,10 +32,10 @@ lb config \
 # Repositories in chroot
 mkdir -p config/archives
 cat << 'EOF' > config/archives/debian.list.chroot
-deb http://deb.debian.org/debian bullseye main contrib non-free
-deb-src http://deb.debian.org/debian bullseye main contrib non-free
-deb http://security.debian.org/debian-security bullseye-security main contrib non-free
-deb-src http://security.debian.org/debian-security bullseye-security main contrib non-free
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb-src http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+deb-src http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
 EOF
 
 echo "Adding required packages..."

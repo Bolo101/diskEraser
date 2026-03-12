@@ -158,9 +158,9 @@ sudo diskeraser --cli     # CLI mode
 
       ```txt
       79ecba690af4f888c53cfb5852fbd194af1f3679460f31a7b82d396da74f5356  diskEraser-v5.4-KDE-32bits.iso
-      fd583c18ae4dcdc0ca7c75e96d6bcfc02f82f9e42e0b43a1bdf21c1d0b9f2f4d  diskEraser-v5.4-KDE-64bits.iso
+      6e686997aede1d3b74bd9a37adc3d9cbd101ac6d64025665d49523a601491239  diskEraser-v5.4-KDE-64bits.iso
       48ba303f98f6e63a35b3eec67e5c63aa1441976137b2175a081afb88725ba1b3  diskEraser-v5.4-XFCE-32bits.iso
-      254ba9b122c37c304e7c6ce9f89e8200bf5ce07193bea696a4885b40dfe65455  diskEraser-v5.4-XFCE-64bits.iso
+      7a515267f0df68ec83ef420378a9d2ec8efbf75a5522a2edf581a898b7ffa016  diskEraser-v5.4-XFCE-64bits.iso
       ```
 
 2. **Flash to USB**:

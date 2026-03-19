@@ -148,9 +148,13 @@ def is_session_active() -> bool:
     global _session_active
     return _session_active
 
-def generate_session_pdf() -> str:
+def generate_session_pdf(output_path: str = None) -> str:
     """
     Generate a PDF from current session logs using built-in libraries only.
+    
+    Args:
+        output_path (str, optional): Full path for the output PDF file.
+                                     If None, a default path in /tmp is used.
     
     Returns:
         str: Path to the generated PDF file
@@ -166,23 +170,40 @@ def generate_session_pdf() -> str:
     if not session_logs:
         raise ValueError("No session logs available to generate PDF")
     
-    # Create output directory if it doesn't exist
-    output_dir = "/tmp/disk_cloner_logs"
-    try:
-        os.makedirs(output_dir, exist_ok=True)
-    except PermissionError:
-        error_msg = f"Permission denied creating directory: {output_dir}"
-        log_error(error_msg)
-        raise PermissionError(error_msg)
-    except OSError as e:
-        error_msg = f"OS error creating directory {output_dir}: {str(e)}"
-        log_error(error_msg)
-        raise OSError(error_msg)
-    
-    # Generate filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    pdf_filename = f"disk_cloner_session_{timestamp}.pdf"
-    pdf_path = os.path.join(output_dir, pdf_filename)
+    if output_path:
+        # Use the provided output path directly
+        pdf_path = output_path
+        # Ensure the parent directory exists
+        output_dir = os.path.dirname(pdf_path)
+        if output_dir:
+            try:
+                os.makedirs(output_dir, exist_ok=True)
+            except PermissionError:
+                error_msg = f"Permission denied creating directory: {output_dir}"
+                log_error(error_msg)
+                raise PermissionError(error_msg)
+            except OSError as e:
+                error_msg = f"OS error creating directory {output_dir}: {str(e)}"
+                log_error(error_msg)
+                raise OSError(error_msg)
+    else:
+        # Default: create output directory in /tmp
+        output_dir = "/tmp/disk_cloner_logs"
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except PermissionError:
+            error_msg = f"Permission denied creating directory: {output_dir}"
+            log_error(error_msg)
+            raise PermissionError(error_msg)
+        except OSError as e:
+            error_msg = f"OS error creating directory {output_dir}: {str(e)}"
+            log_error(error_msg)
+            raise OSError(error_msg)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pdf_filename = f"disk_cloner_session_{timestamp}.pdf"
+        pdf_path = os.path.join(output_dir, pdf_filename)
     
     try:
         # Create PDF using basic PDF structure
@@ -210,36 +231,56 @@ def generate_session_pdf() -> str:
         log_error(error_msg)
         raise IOError(error_msg)
 
-def generate_log_file_pdf() -> str:
+def generate_log_file_pdf(output_path: str = None) -> str:
     """
     Generate a PDF from the complete log file using built-in libraries only.
-    
+
+    Args:
+        output_path (str, optional): Full path for the output PDF file.
+                                     If None, a default path in /tmp is used.
+
     Returns:
         str: Path to the generated PDF file
-    
+
     Raises:
         FileNotFoundError: If log file doesn't exist
         PermissionError: If unable to read log file or write PDF
         UnicodeDecodeError: If log file has encoding issues
         OSError: If filesystem operations fail
     """
-    # Create output directory if it doesn't exist
-    output_dir = "/tmp/disk_cloner_logs"
-    try:
-        os.makedirs(output_dir, exist_ok=True)
-    except PermissionError:
-        error_msg = f"Permission denied creating directory: {output_dir}"
-        log_error(error_msg)
-        raise PermissionError(error_msg)
-    except OSError as e:
-        error_msg = f"OS error creating directory {output_dir}: {str(e)}"
-        log_error(error_msg)
-        raise OSError(error_msg)
-    
-    # Generate filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    pdf_filename = f"disk_cloner_complete_log_{timestamp}.pdf"
-    pdf_path = os.path.join(output_dir, pdf_filename)
+    if output_path:
+        # Use the provided output path directly
+        pdf_path = output_path
+        output_dir = os.path.dirname(pdf_path)
+        if output_dir:
+            try:
+                os.makedirs(output_dir, exist_ok=True)
+            except PermissionError:
+                error_msg = f"Permission denied creating directory: {output_dir}"
+                log_error(error_msg)
+                raise PermissionError(error_msg)
+            except OSError as e:
+                error_msg = f"OS error creating directory {output_dir}: {str(e)}"
+                log_error(error_msg)
+                raise OSError(error_msg)
+    else:
+        # Default: create output directory in /tmp
+        output_dir = "/tmp/disk_cloner_logs"
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except PermissionError:
+            error_msg = f"Permission denied creating directory: {output_dir}"
+            log_error(error_msg)
+            raise PermissionError(error_msg)
+        except OSError as e:
+            error_msg = f"OS error creating directory {output_dir}: {str(e)}"
+            log_error(error_msg)
+            raise OSError(error_msg)
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pdf_filename = f"disk_cloner_complete_log_{timestamp}.pdf"
+        pdf_path = os.path.join(output_dir, pdf_filename)
     
     # Read log file
     if not os.path.exists(log_file):

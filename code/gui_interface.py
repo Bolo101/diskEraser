@@ -2,7 +2,7 @@ import os
 import time
 import sys
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from subprocess import CalledProcessError, SubprocessError
 from disk_erase import get_disk_serial, is_ssd
 from utils import get_disk_list, get_base_disk
@@ -453,17 +453,352 @@ class DiskEraserGUI:
             self.update_gui_log(error_msg)
             log_error(error_msg)
     
-    def print_session_log(self) -> None:
-        """Generate and save session log as PDF"""
+    # -------------------------------------------------------------------------
+    #  External-storage helpers (mount / unmount / export)
+    # -------------------------------------------------------------------------
+
+    def _get_external_disks(self) -> list:
+        """
+        Return a list of dicts describing block devices that are NOT the
+        active system disk and NOT a pure virtual/loop device.
+
+        Each dict has:
+            device      – base device name, e.g. 'sdb'
+            path        – full path, e.g. '/dev/sdb'
+            size        – human-readable size from lsblk
+            model       – model string (may be empty)
+            partitions  – list of partition names, e.g. ['sdb1', 'sdb2']
+            mount_points– dict {partition_name: mount_point or None}
+        """
+        import subprocess as _sp
+        import json as _json
+
+        active_disks = set(self.active_disk or [])
+        result = []
+
         try:
-            self.status_var.set("Generating session log PDF...")
-            pdf_path = generate_session_pdf()
-            
-            success_msg = f"Session log PDF generated successfully!\nSaved to: {pdf_path}"
-            messagebox.showinfo("PDF Generated", success_msg)
-            self.update_gui_log(f"Session log PDF saved to: {pdf_path}")
-            self.status_var.set("Session log PDF generated")
-            
+            raw = _sp.run(
+                ["lsblk", "-J", "-o", "NAME,SIZE,TYPE,MODEL,MOUNTPOINT"],
+                stdout=_sp.PIPE, stderr=_sp.PIPE
+            ).stdout.decode()
+            data = _json.loads(raw)
+        except Exception as e:
+            log_error(f"lsblk JSON failed: {e}")
+            return result
+
+        for dev in data.get("blockdevices", []):
+            dev_name = dev.get("name", "")
+            dev_type = dev.get("type", "")
+
+            # Only plain disks (not loop, rom, dm…)
+            if dev_type not in ("disk",):
+                continue
+            # Skip the active system disk
+            if dev_name in active_disks:
+                continue
+            # Skip loop devices
+            if dev_name.startswith("loop"):
+                continue
+
+            partitions = []
+            mount_map = {}
+
+            children = dev.get("children") or []
+            if children:
+                for child in children:
+                    p_name = child.get("name", "")
+                    p_type = child.get("type", "")
+                    if p_type == "part":
+                        partitions.append(p_name)
+                        mount_map[p_name] = child.get("mountpoint") or None
+            else:
+                # Disk with no partition table — treat the disk itself as target
+                partitions.append(dev_name)
+                mount_map[dev_name] = dev.get("mountpoint") or None
+
+            result.append({
+                "device":       dev_name,
+                "path":         f"/dev/{dev_name}",
+                "size":         dev.get("size", "?"),
+                "model":        (dev.get("model") or "").strip(),
+                "partitions":   partitions,
+                "mount_points": mount_map,
+            })
+
+        return result
+
+    def _mount_partition(self, partition: str) -> str | None:
+        """
+        Mount /dev/<partition> to a unique temp directory.
+        Returns the mount point on success, None on failure.
+        """
+        import subprocess as _sp, tempfile as _tf
+
+        mount_dir = _tf.mkdtemp(prefix="disk_eraser_export_")
+        try:
+            r = _sp.run(
+                ["mount", f"/dev/{partition}", mount_dir],
+                stdout=_sp.PIPE, stderr=_sp.PIPE
+            )
+            if r.returncode != 0:
+                err = r.stderr.decode().strip()
+                log_error(f"mount /dev/{partition} -> {mount_dir} failed: {err}")
+                try:
+                    import os as _os; _os.rmdir(mount_dir)
+                except OSError:
+                    pass
+                return None
+            log_info(f"Mounted /dev/{partition} at {mount_dir}")
+            return mount_dir
+        except FileNotFoundError:
+            log_error("mount command not found")
+            return None
+        except Exception as e:
+            log_error(f"Unexpected error mounting /dev/{partition}: {e}")
+            return None
+
+    def _unmount_partition(self, mount_dir: str) -> None:
+        """Unmount and remove the temporary mount directory."""
+        import subprocess as _sp, os as _os
+
+        try:
+            r = _sp.run(["umount", mount_dir], stdout=_sp.PIPE, stderr=_sp.PIPE)
+            if r.returncode != 0:
+                err = r.stderr.decode().strip()
+                log_error(f"umount {mount_dir} failed: {err}")
+            else:
+                log_info(f"Unmounted {mount_dir}")
+        except Exception as e:
+            log_error(f"Error during umount {mount_dir}: {e}")
+        finally:
+            try:
+                _os.rmdir(mount_dir)
+            except OSError:
+                pass
+
+    def _show_disk_picker(self, external_disks: list):
+        """
+        Modal dialog that lets the user pick one partition from the list of
+        external disks.  Returns (partition_name, was_already_mounted,
+        existing_mount_point) or (None, False, None) if cancelled.
+        """
+        import tkinter as _tk
+        from tkinter import ttk as _ttk
+
+        result = {"partition": None, "already_mounted": False, "mount_point": None}
+
+        dlg = _tk.Toplevel(self.root)
+        dlg.title("Sélectionner le support externe")
+        dlg.grab_set()
+        dlg.resizable(False, False)
+
+        # ---- Header ----
+        header = _ttk.Label(
+            dlg,
+            text="Choisissez le support externe pour l'export PDF",
+            font=("Arial", 11, "bold"),
+            padding=(10, 10)
+        )
+        header.pack(fill=_tk.X)
+
+        sub = _ttk.Label(
+            dlg,
+            text="Seuls les disques hors système sont listés.\n"
+                 "Le support sera monté automatiquement si nécessaire.",
+            foreground="#555555",
+            padding=(10, 0, 10, 6)
+        )
+        sub.pack(fill=_tk.X)
+
+        # ---- Listbox ----
+        frame = _ttk.Frame(dlg, padding=(10, 0, 10, 6))
+        frame.pack(fill=_tk.BOTH, expand=True)
+
+        lb = _tk.Listbox(frame, width=68, height=12, font=("Courier", 9),
+                         selectmode=_tk.SINGLE, activestyle="dotbox")
+        sb = _ttk.Scrollbar(frame, orient=_tk.VERTICAL, command=lb.yview)
+        lb.configure(yscrollcommand=sb.set)
+        lb.pack(side=_tk.LEFT, fill=_tk.BOTH, expand=True)
+        sb.pack(side=_tk.RIGHT, fill=_tk.Y)
+
+        # Flat list: one row per partition
+        entries = []   # (partition_name, already_mounted, existing_mp)
+        for disk in external_disks:
+            model_str = f" [{disk['model']}]" if disk['model'] else ""
+            disk_label = f"── {disk['path']}  {disk['size']}{model_str}"
+            lb.insert(_tk.END, disk_label)
+            lb.itemconfig(_tk.END, foreground="#333388", background="#eeeeff")
+            entries.append(None)   # placeholder – not selectable
+
+            for part in disk["partitions"]:
+                mp = disk["mount_points"].get(part)
+                if mp:
+                    status = f"monté sur {mp}"
+                else:
+                    status = "non monté"
+                row = f"     /dev/{part:<14}  {status}"
+                lb.insert(_tk.END, row)
+                entries.append((part, mp is not None, mp))
+
+        # ---- Buttons ----
+        btn_frame = _ttk.Frame(dlg, padding=(10, 6))
+        btn_frame.pack(fill=_tk.X)
+
+        def on_select():
+            sel = lb.curselection()
+            if not sel:
+                messagebox.showwarning("Aucune sélection",
+                                       "Veuillez sélectionner une partition.",
+                                       parent=dlg)
+                return
+            idx = sel[0]
+            entry = entries[idx]
+            if entry is None:
+                messagebox.showwarning("Sélection invalide",
+                                       "Veuillez sélectionner une partition,\n"
+                                       "pas un en-tête de disque.",
+                                       parent=dlg)
+                return
+            result["partition"]      = entry[0]
+            result["already_mounted"]= entry[1]
+            result["mount_point"]    = entry[2]
+            dlg.destroy()
+
+        def on_cancel():
+            dlg.destroy()
+
+        _ttk.Button(btn_frame, text="Sélectionner", command=on_select).pack(
+            side=_tk.LEFT, padx=4)
+        _ttk.Button(btn_frame, text="Annuler", command=on_cancel).pack(
+            side=_tk.LEFT, padx=4)
+
+        dlg.update_idletasks()
+        w, h = dlg.winfo_reqwidth(), dlg.winfo_reqheight()
+        x = self.root.winfo_rootx() + (self.root.winfo_width()  - w) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - h) // 2
+        dlg.geometry(f"+{x}+{y}")
+
+        self.root.wait_window(dlg)
+        return result["partition"], result["already_mounted"], result["mount_point"]
+
+    def _request_external_export_path(self, default_filename: str):
+        """
+        Full workflow:
+          1. Detect external disks (mounted or not).
+          2. Show the disk picker dialog.
+          3. If the chosen partition is not mounted, mount it to a temp dir.
+          4. Open the standard Tk save-as dialog on that mount point.
+          5. Validate the destination is still on the external mount.
+          6. Return the chosen path (caller is responsible for unmounting via
+             self._pending_unmount_dir after PDF is written).
+
+        Returns:
+            str | None: Chosen absolute file path, or None if cancelled.
+        """
+        external_disks = self._get_external_disks()
+        if not external_disks:
+            messagebox.showerror(
+                "Aucun support externe détecté",
+                "Aucun disque externe n'a été détecté.\n\n"
+                "Branchez une clé USB, un disque dur externe ou tout autre "
+                "support amovible, puis réessayez."
+            )
+            return None
+
+        partition, already_mounted, existing_mp = self._show_disk_picker(external_disks)
+        if not partition:
+            return None   # user cancelled picker
+
+        # Mount if needed
+        self._pending_unmount_dir = None
+        if already_mounted and existing_mp:
+            mount_point = existing_mp
+        else:
+            self.status_var.set(f"Montage de /dev/{partition}…")
+            self.root.update_idletasks()
+            mount_point = self._mount_partition(partition)
+            if not mount_point:
+                messagebox.showerror(
+                    "Erreur de montage",
+                    f"Impossible de monter /dev/{partition}.\n\n"
+                    "Vérifiez que le support est correctement branché et "
+                    "que le système de fichiers est supporté (ext4, NTFS, FAT32…)."
+                )
+                self.status_var.set("Prêt")
+                return None
+            self._pending_unmount_dir = mount_point   # remember for unmount after save
+
+        # Open save dialog on the mount point
+        chosen_path = filedialog.asksaveasfilename(
+            title="Exporter le PDF — support externe",
+            initialdir=mount_point,
+            initialfile=default_filename,
+            defaultextension=".pdf",
+            filetypes=[("Fichiers PDF", "*.pdf"), ("Tous les fichiers", "*.*")],
+        )
+
+        if not chosen_path:
+            # User cancelled — unmount if we mounted it ourselves
+            if self._pending_unmount_dir:
+                self.status_var.set(f"Démontage de /dev/{partition}…")
+                self.root.update_idletasks()
+                self._unmount_partition(self._pending_unmount_dir)
+                self._pending_unmount_dir = None
+            self.status_var.set("Prêt")
+            return None
+
+        # Basic sanity check: path must be inside the mount point
+        import os as _os
+        mp_norm   = mount_point.rstrip('/') + '/'
+        path_norm = _os.path.abspath(chosen_path).rstrip('/') + '/'
+        if not path_norm.startswith(mp_norm):
+            messagebox.showwarning(
+                "Destination invalide",
+                "Le chemin choisi n'est pas sur le support externe monté.\n"
+                f"Veuillez choisir un emplacement sous : {mount_point}"
+            )
+            if self._pending_unmount_dir:
+                self._unmount_partition(self._pending_unmount_dir)
+                self._pending_unmount_dir = None
+            return None
+
+        return chosen_path
+
+    def _finalize_export(self, partition_label: str = "") -> None:
+        """
+        Unmount the temporary mount directory that was created during an export
+        (if any).  Called after the PDF has been successfully written.
+        """
+        if getattr(self, '_pending_unmount_dir', None):
+            self.status_var.set("Démontage du support externe…")
+            self.root.update_idletasks()
+            self._unmount_partition(self._pending_unmount_dir)
+            self._pending_unmount_dir = None
+            self.status_var.set("Support externe démonté.")
+            self.update_gui_log("Support externe démonté avec succès.")
+
+    def print_session_log(self) -> None:
+        """Generate and save session log as PDF to an external storage device."""
+        from datetime import datetime as _dt
+        default_name = f"session_log_{_dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        export_path = self._request_external_export_path(default_name)
+        if not export_path:
+            self.update_gui_log("Export PDF session annulé.")
+            self.status_var.set("Prêt")
+            return
+
+        try:
+            self.status_var.set("Génération du PDF de session…")
+            pdf_path = generate_session_pdf(output_path=export_path)
+
+            self._finalize_export()
+
+            success_msg = f"PDF de session exporté avec succès !\nEnregistré : {pdf_path}"
+            messagebox.showinfo("PDF Exporté", success_msg)
+            self.update_gui_log(f"PDF de session enregistré : {pdf_path}")
+            self.status_var.set("PDF de session exporté")
+
         except (ImportError, ModuleNotFoundError) as e:
             error_msg = f"PDF library not available: {str(e)}"
             messagebox.showerror("Library Error", error_msg)
@@ -496,16 +831,27 @@ class DiskEraserGUI:
             self.status_var.set("Ready")
     
     def print_complete_log(self) -> None:
-        """Generate and save complete log file as PDF"""
+        """Generate and save complete log file as PDF to an external storage device."""
+        from datetime import datetime as _dt
+        default_name = f"complete_log_{_dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        export_path = self._request_external_export_path(default_name)
+        if not export_path:
+            self.update_gui_log("Export PDF journal complet annulé.")
+            self.status_var.set("Prêt")
+            return
+
         try:
-            self.status_var.set("Generating complete log PDF...")
-            pdf_path = generate_log_file_pdf()
-            
-            success_msg = f"Complete log PDF generated successfully!\nSaved to: {pdf_path}"
-            messagebox.showinfo("PDF Generated", success_msg)
-            self.update_gui_log(f"Complete log PDF saved to: {pdf_path}")
-            self.status_var.set("Complete log PDF generated")
-            
+            self.status_var.set("Génération du PDF journal complet…")
+            pdf_path = generate_log_file_pdf(output_path=export_path)
+
+            self._finalize_export()
+
+            success_msg = f"PDF journal complet exporté avec succès !\nEnregistré : {pdf_path}"
+            messagebox.showinfo("PDF Exporté", success_msg)
+            self.update_gui_log(f"PDF journal complet enregistré : {pdf_path}")
+            self.status_var.set("PDF journal complet exporté")
+
         except (ImportError, ModuleNotFoundError) as e:
             error_msg = f"PDF library not available: {str(e)}"
             messagebox.showerror("Library Error", error_msg)

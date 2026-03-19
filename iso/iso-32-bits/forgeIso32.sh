@@ -30,9 +30,9 @@ lb config \
   --bootloaders="syslinux" \
   --binary-images=iso-hybrid
 # NOTE: --debian-installer=none is intentional.
-# Using --debian-installer=live on bullseye i386 triggers:
+# --debian-installer=live on bullseye i386 triggers a live-build bug:
 #   "flAbsPath on localArchive/aptdir/.../dpkg/status failed (realpath: No such file or directory)"
-# This is a live-build bug on 32-bit bullseye. none avoids it entirely.
+# Our custom install-to-disk.sh replaces the need for it entirely.
 
 # Repositories in chroot
 mkdir -p config/archives
@@ -65,6 +65,12 @@ xserver-xorg-video-fbdev
 xserver-xorg-input-all
 openbox
 lightdm
+xterm
+rsync
+grub-pc
+grub-efi-ia32
+grub-efi-ia32-bin
+os-prober
 network-manager
 sudo
 evince
@@ -172,15 +178,7 @@ LABEL="skip"
 EOF
 
 # ─────────────────────────────────────────────────────────────────────────────
-# KIOSK / FULLSCREEN SESSION
-#
-# openbox is the only WM — no XFCE, no desktop at all.
-# rc.xml forces every window fullscreen + borderless the moment it maps.
-#
-# Boot flow:
-#   LightDM auto-login → disk-eraser-kiosk XSession → de-session.sh
-#     → openbox (WM, background) + de (app, fullscreen, foreground)
-#   When the app exits the session ends and LightDM restarts it.
+# KIOSK SESSION
 # ─────────────────────────────────────────────────────────────────────────────
 
 echo "Configuring openbox kiosk session..."
@@ -203,8 +201,6 @@ EOF
 
 cat << 'EOF' > config/includes.chroot/usr/local/bin/de-session.sh
 #!/bin/bash
-# Disk Eraser kiosk session — called by LightDM.
-
 xset s off -dpms 2>/dev/null || true
 xset s noblank   2>/dev/null || true
 
@@ -212,7 +208,13 @@ openbox &
 WM_PID=$!
 sleep 1
 
-sudo /usr/local/bin/de
+if grep -q "installer=1" /proc/cmdline; then
+    xterm -title "Disk Eraser Installer" \
+          -fa "Monospace" -fs 12 \
+          -e "sudo /usr/local/bin/install-to-disk.sh"
+else
+    sudo /usr/local/bin/de
+fi
 
 kill "$WM_PID" 2>/dev/null || true
 EOF
@@ -250,24 +252,193 @@ echo "Type 'sudo de' to use the Secure Disk Eraser program"
 EOF
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DISK INSTALLER (i386 variant — uses i386-efi for UEFI, i386-pc for BIOS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+echo "Writing disk installer..."
+cat << 'INSTALLER' > config/includes.chroot/usr/local/bin/install-to-disk.sh
+#!/bin/bash
+set -e
+TITLE="Disk Eraser — Installer (32-bit)"
+TARGET_MNT="/mnt/install-target"
+
+if [ "$(id -u)" -ne 0 ]; then
+    exec sudo "$0" "$@"
+fi
+
+whiptail --title "$TITLE" --msgbox \
+"Welcome to the Disk Eraser installer.
+
+This will copy the live system to a disk of your choice.
+The installed system will boot directly into Disk Eraser,
+exactly like this live environment.
+
+WARNING: all data on the selected disk will be erased." \
+14 64
+
+LIVE_DEV=""
+LIVE_DEV=$(lsblk -no PKNAME "$(findmnt -n -o SOURCE /run/live/medium 2>/dev/null)" 2>/dev/null || true)
+
+DISK_MENU=()
+while read -r name size model; do
+    [ "$name" = "$LIVE_DEV" ] && continue
+    [[ "$name" == loop* ]] && continue
+    [[ "$name" == sr*   ]] && continue
+    DISK_MENU+=("/dev/$name" "$(printf '%-8s %s' "$size" "$model")")
+done < <(lsblk -dn -o NAME,SIZE,MODEL 2>/dev/null)
+
+if [ "${#DISK_MENU[@]}" -eq 0 ]; then
+    whiptail --title "$TITLE" --msgbox \
+"No suitable target disk found.
+
+Please connect a target disk and restart the installer." \
+10 60
+    exit 1
+fi
+
+TARGET=$(whiptail --title "$TITLE" \
+    --menu "Select the disk to install to:" \
+    20 64 10 "${DISK_MENU[@]}" \
+    3>&1 1>&2 2>&3) || { echo "Installer cancelled."; exit 0; }
+
+whiptail --title "$TITLE" --yesno \
+"FINAL WARNING
+
+All data on $TARGET will be permanently and irrecoverably erased.
+
+Proceed with installation?" \
+10 60 || { echo "Installer cancelled."; exit 0; }
+
+UEFI=0
+[ -d /sys/firmware/efi ] && UEFI=1
+
+whiptail --title "$TITLE" --infobox "Partitioning $TARGET..." 5 50
+wipefs -a "$TARGET"
+if [ "$UEFI" -eq 1 ]; then
+    parted -s "$TARGET" mklabel gpt
+    parted -s "$TARGET" mkpart ESP  fat32  1MiB 513MiB
+    parted -s "$TARGET" set 1 esp on
+    parted -s "$TARGET" mkpart root ext4  513MiB 100%
+    EFI_PART="${TARGET}1"
+    ROOT_PART="${TARGET}2"
+else
+    parted -s "$TARGET" mklabel msdos
+    parted -s "$TARGET" mkpart primary ext4 1MiB 100%
+    parted -s "$TARGET" set 1 boot on
+    ROOT_PART="${TARGET}1"
+fi
+
+whiptail --title "$TITLE" --infobox "Formatting partitions..." 5 50
+mkfs.ext4 -F "$ROOT_PART"
+[ "$UEFI" -eq 1 ] && mkfs.fat -F32 "$EFI_PART"
+
+whiptail --title "$TITLE" --infobox "Mounting target filesystem..." 5 50
+mkdir -p "$TARGET_MNT"
+mount "$ROOT_PART" "$TARGET_MNT"
+if [ "$UEFI" -eq 1 ]; then
+    mkdir -p "$TARGET_MNT/boot/efi"
+    mount "$EFI_PART" "$TARGET_MNT/boot/efi"
+fi
+
+whiptail --title "$TITLE" --infobox \
+"Copying system to $TARGET
+(this may take several minutes)..." \
+6 56
+rsync -aHAX \
+    --exclude=/proc \
+    --exclude=/sys \
+    --exclude=/dev \
+    --exclude=/run \
+    --exclude=/mnt \
+    --exclude=/media \
+    --exclude=/tmp \
+    --exclude=/live \
+    / "$TARGET_MNT"/
+
+mkdir -p "$TARGET_MNT"/{proc,sys,dev,run,mnt,media,tmp}
+chmod 1777 "$TARGET_MNT/tmp"
+
+ROOT_UUID=$(blkid -s UUID -o value "$ROOT_PART")
+{
+    echo "# <file system>  <mount point>  <type>  <options>              <dump>  <pass>"
+    echo "UUID=$ROOT_UUID  /              ext4    errors=remount-ro       0       1"
+    if [ "$UEFI" -eq 1 ]; then
+        EFI_UUID=$(blkid -s UUID -o value "$EFI_PART")
+        echo "UUID=$EFI_UUID   /boot/efi      vfat    umask=0077              0       1"
+    fi
+    echo "tmpfs            /tmp           tmpfs   defaults,nosuid,nodev   0       0"
+} > "$TARGET_MNT/etc/fstab"
+
+whiptail --title "$TITLE" --infobox "Installing bootloader..." 5 50
+mount --bind /dev  "$TARGET_MNT/dev"
+mount --bind /proc "$TARGET_MNT/proc"
+mount --bind /sys  "$TARGET_MNT/sys"
+if [ "$UEFI" -eq 1 ]; then
+    mount --bind /sys/firmware/efi/efivars "$TARGET_MNT/sys/firmware/efi/efivars" 2>/dev/null || true
+    chroot "$TARGET_MNT" grub-install \
+        --target=i386-efi \
+        --efi-directory=/boot/efi \
+        --bootloader-id=DiskEraser \
+        --recheck
+else
+    chroot "$TARGET_MNT" grub-install \
+        --target=i386-pc \
+        --recheck \
+        "$TARGET"
+fi
+
+cat > "$TARGET_MNT/etc/default/grub" << 'GRUBCFG'
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=3
+GRUB_DISTRIBUTOR="Disk Eraser"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+GRUB_CMDLINE_LINUX=""
+GRUBCFG
+
+chroot "$TARGET_MNT" update-grub
+
+umount "$TARGET_MNT/sys/firmware/efi/efivars" 2>/dev/null || true
+umount "$TARGET_MNT/dev"
+umount "$TARGET_MNT/proc"
+umount "$TARGET_MNT/sys"
+[ "$UEFI" -eq 1 ] && umount "$TARGET_MNT/boot/efi"
+umount "$TARGET_MNT"
+
+whiptail --title "$TITLE" --msgbox \
+"Installation complete!
+
+The system has been installed to $TARGET.
+Remove the live USB/CD, then press OK to reboot." \
+10 60
+
+reboot
+INSTALLER
+chmod +x config/includes.chroot/usr/local/bin/install-to-disk.sh
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 echo "Configuring boot menu..."
 mkdir -p config/includes.binary/isolinux
 cat << 'EOF' > config/includes.binary/isolinux/isolinux.cfg
 UI vesamenu.c32
 DEFAULT live
-TIMEOUT 50
+TIMEOUT 100
 
 MENU TITLE Secure Disk Eraser (32-bit) - Boot Menu
 
 LABEL live
-  MENU LABEL Start Disk Eraser
+  MENU LABEL Start Disk Eraser (Live)
   MENU DEFAULT
   KERNEL /live/vmlinuz
   APPEND initrd=/live/initrd.img boot=live config components
 
+LABEL install
+  MENU LABEL Install Disk Eraser to Disk
+  KERNEL /live/vmlinuz
+  APPEND initrd=/live/initrd.img boot=live config components installer=1
+
 LABEL live-safe
-  MENU LABEL Start Disk Eraser - Safe Mode (nomodeset)
+  MENU LABEL Start Live - Safe Mode (nomodeset)
   KERNEL /live/vmlinuz
   APPEND initrd=/live/initrd.img boot=live config components nomodeset
 EOF

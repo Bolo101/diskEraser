@@ -3,14 +3,14 @@
 # Exit on any error
 set -e
 
-# ISO name and working directory
-ISO_NAME="$(pwd)/diskEraser-v5.4-XFCE-32bits.iso"
+# Variables
+ISO_NAME="$(pwd)/diskEraser-v5.4-32bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../../code"
 
 echo "Installing live-build and required dependencies..."
 sudo apt update
-sudo apt install -y live-build python3 calamares calamares-settings-debian syslinux isolinux
+sudo apt install -y live-build python3 syslinux isolinux
 
 echo "Setting up live-build workspace..."
 rm -rf "$WORK_DIR"
@@ -25,10 +25,14 @@ lb config \
   --architectures=i386 \
   --linux-packages=linux-image \
   --linux-flavours=686 \
-  --debian-installer=live \
+  --debian-installer=none \
   --bootappend-live="boot=live components config hostname=secure-eraser username=user locales=fr_FR.UTF-8 keyboard-layouts=fr" \
   --bootloaders="syslinux" \
   --binary-images=iso-hybrid
+# NOTE: --debian-installer=none is intentional.
+# Using --debian-installer=live on bullseye i386 triggers:
+#   "flAbsPath on localArchive/aptdir/.../dpkg/status failed (realpath: No such file or directory)"
+# This is a live-build bug on 32-bit bullseye. none avoids it entirely.
 
 # Repositories in chroot
 mkdir -p config/archives
@@ -50,15 +54,18 @@ python3-tk
 dosfstools
 firmware-linux-free
 firmware-linux-nonfree
-calamares
-calamares-settings-debian
 squashfs-tools
 xorg
-gparted
-xfce4
-xfce4-power-manager
+xserver-xorg-video-all
+xserver-xorg-video-intel
+xserver-xorg-video-ati
+xserver-xorg-video-nouveau
+xserver-xorg-video-vesa
+xserver-xorg-video-fbdev
+xserver-xorg-input-all
+openbox
+lightdm
 network-manager
-network-manager-gnome
 sudo
 evince
 live-boot
@@ -69,19 +76,12 @@ keyboard-configuration
 cryptsetup
 dmsetup
 systemd
-xserver-xorg-video-all
-xserver-xorg-video-intel
-xserver-xorg-video-ati
-xserver-xorg-video-nouveau
-xserver-xorg-video-vesa
-xserver-xorg-video-fbdev
-xserver-xorg-input-all
 pciutils
 usbutils
 acpi
 EOF
 
-echo "Configuring live system for French AZERTY keyboard..."
+echo "Configuring French AZERTY keyboard..."
 mkdir -p config/includes.chroot/etc/default/
 cat << 'EOF' > config/includes.chroot/etc/default/locale
 LANG=fr_FR.UTF-8
@@ -124,60 +124,15 @@ AllowSuspendThenHibernate=no
 AllowHybridSleep=no
 EOF
 
-mkdir -p config/includes.chroot/etc/systemd/system/sleep.target.d/
-cat << 'EOF' > config/includes.chroot/etc/systemd/system/sleep.target.d/override.conf
+for target in sleep suspend hibernate hybrid-sleep; do
+  mkdir -p "config/includes.chroot/etc/systemd/system/${target}.target.d/"
+  cat << EOF > "config/includes.chroot/etc/systemd/system/${target}.target.d/override.conf"
 [Unit]
 ConditionPathExists=/dev/null
 EOF
-
-mkdir -p config/includes.chroot/etc/systemd/system/suspend.target.d/
-cat << 'EOF' > config/includes.chroot/etc/systemd/system/suspend.target.d/override.conf
-[Unit]
-ConditionPathExists=/dev/null
-EOF
-
-mkdir -p config/includes.chroot/etc/systemd/system/hibernate.target.d/
-cat << 'EOF' > config/includes.chroot/etc/systemd/system/hibernate.target.d/override.conf
-[Unit]
-ConditionPathExists=/dev/null
-EOF
-
-mkdir -p config/includes.chroot/etc/systemd/system/hybrid-sleep.target.d/
-cat << 'EOF' > config/includes.chroot/etc/systemd/system/hybrid-sleep.target.d/override.conf
-[Unit]
-ConditionPathExists=/dev/null
-EOF
+done
 
 echo "Disabling screen blanking..."
-mkdir -p config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/
-cat << 'EOF' > config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfce4-power-manager" version="1.0">
-  <property name="xfce4-power-manager" type="empty">
-    <property name="power-button-action" type="uint" value="3"/>
-    <property name="show-tray-icon" type="bool" value="true"/>
-    <property name="logind-handle-lid-switch" type="bool" value="false"/>
-    <property name="dpms-enabled" type="bool" value="false"/>
-    <property name="blank-on-ac" type="int" value="0"/>
-    <property name="blank-on-battery" type="int" value="0"/>
-    <property name="dpms-on-ac-sleep" type="uint" value="0"/>
-    <property name="dpms-on-ac-off" type="uint" value="0"/>
-    <property name="dpms-on-battery-sleep" type="uint" value="0"/>
-    <property name="dpms-on-battery-off" type="uint" value="0"/>
-    <property name="brightness-on-ac" type="uint" value="9"/>
-    <property name="brightness-on-battery" type="uint" value="9"/>
-    <property name="inactivity-on-ac" type="uint" value="0"/>
-    <property name="inactivity-on-battery" type="uint" value="0"/>
-    <property name="inactivity-sleep-mode-on-ac" type="uint" value="1"/>
-    <property name="inactivity-sleep-mode-on-battery" type="uint" value="1"/>
-    <property name="lid-action-on-ac" type="uint" value="0"/>
-    <property name="lid-action-on-battery" type="uint" value="0"/>
-    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>
-    <property name="critical-power-action" type="uint" value="1"/>
-  </property>
-</channel>
-EOF
-
 mkdir -p config/includes.chroot/etc/X11/xorg.conf.d/
 cat << 'EOF' > config/includes.chroot/etc/X11/xorg.conf.d/10-monitor.conf
 Section "ServerFlags"
@@ -197,7 +152,11 @@ echo "Copying application files..."
 mkdir -p config/includes.chroot/usr/local/bin/
 cp -r "${CODE_DIR}"/* config/includes.chroot/usr/local/bin/ 2>/dev/null || true
 chmod +x config/includes.chroot/usr/local/bin/* 2>/dev/null || true
-ln -sf /usr/local/bin/main.py config/includes.chroot/usr/local/bin/de 2>/dev/null || true
+cat << 'WRAPPER' > config/includes.chroot/usr/local/bin/de
+#!/bin/bash
+exec python3 /usr/local/bin/main.py "$@"
+WRAPPER
+chmod +x config/includes.chroot/usr/local/bin/de
 
 mkdir -p config/includes.chroot/etc/sudoers.d/
 echo "user ALL=(ALL) NOPASSWD: ALL" > config/includes.chroot/etc/sudoers.d/passwordless
@@ -205,60 +164,92 @@ chmod 0440 config/includes.chroot/etc/sudoers.d/passwordless
 
 mkdir -p config/includes.chroot/etc/udev/rules.d/
 cat << 'EOF' > config/includes.chroot/etc/udev/rules.d/usb-flash.rules
+ATTR{queue/rotational}=="0", GOTO="skip"
+ATTRS{queue_type}!="none", GOTO="skip"
 ATTR{removable}=="1", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ACTION=="add", ATTR{queue/rotational}="0"
 ATTR{removable}=="1", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ACTION=="add", RUN+="/bin/beep -f 70 -r 2"
+LABEL="skip"
 EOF
 
-mkdir -p config/includes.chroot/usr/share/applications/
-cat << 'EOF' > config/includes.chroot/usr/share/applications/secure_disk_eraser.desktop
-[Desktop Entry]
-Version=1.0
-Name=Secure Disk Eraser
-Comment=Securely erase disks and partitions
-Exec=sudo /usr/local/bin/de
-Icon=drive-harddisk
-Terminal=false
-Type=Application
-Categories=System;Security;
-Keywords=disk;erase;secure;wipe;
+# ─────────────────────────────────────────────────────────────────────────────
+# KIOSK / FULLSCREEN SESSION
+#
+# openbox is the only WM — no XFCE, no desktop at all.
+# rc.xml forces every window fullscreen + borderless the moment it maps.
+#
+# Boot flow:
+#   LightDM auto-login → disk-eraser-kiosk XSession → de-session.sh
+#     → openbox (WM, background) + de (app, fullscreen, foreground)
+#   When the app exits the session ends and LightDM restarts it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+echo "Configuring openbox kiosk session..."
+
+mkdir -p config/includes.chroot/etc/xdg/openbox/
+cat << 'EOF' > config/includes.chroot/etc/xdg/openbox/rc.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc"
+                xmlns:xi="http://www.w3.org/2001/XInclude">
+  <applications>
+    <application class="*">
+      <fullscreen>yes</fullscreen>
+      <decor>no</decor>
+      <maximized>yes</maximized>
+      <layer>above</layer>
+    </application>
+  </applications>
+</openbox_config>
 EOF
 
-mkdir -p config/includes.chroot/etc/xdg/autostart/
-cat << 'EOF' > config/includes.chroot/etc/xdg/autostart/disk-eraser.desktop
+cat << 'EOF' > config/includes.chroot/usr/local/bin/de-session.sh
+#!/bin/bash
+# Disk Eraser kiosk session — called by LightDM.
+
+xset s off -dpms 2>/dev/null || true
+xset s noblank   2>/dev/null || true
+
+openbox &
+WM_PID=$!
+sleep 1
+
+sudo /usr/local/bin/de
+
+kill "$WM_PID" 2>/dev/null || true
+EOF
+chmod +x config/includes.chroot/usr/local/bin/de-session.sh
+
+mkdir -p config/includes.chroot/usr/share/xsessions/
+cat << 'EOF' > config/includes.chroot/usr/share/xsessions/disk-eraser-kiosk.desktop
 [Desktop Entry]
+Name=Disk Eraser (Kiosk)
+Comment=Launch Disk Eraser fullscreen, no desktop
+Exec=/usr/local/bin/de-session.sh
 Type=Application
-Name=Disk Eraser
-Comment=Start Disk Eraser automatically in live mode
-Exec=sudo /usr/local/bin/de
-Terminal=false
-Icon=drive-harddisk
-Categories=System;Security;
-OnlyShowIn=XFCE;
+EOF
+
+mkdir -p config/includes.chroot/etc/lightdm/lightdm.conf.d/
+cat << 'EOF' > config/includes.chroot/etc/lightdm/lightdm.conf.d/50-autologin.conf
+[Seat:*]
+autologin-user=user
+autologin-session=disk-eraser-kiosk
+autologin-user-timeout=0
 EOF
 
 mkdir -p config/includes.chroot/etc/skel/
+cat << 'EOF' > config/includes.chroot/etc/skel/.dmrc
+[Desktop]
+Session=disk-eraser-kiosk
+EOF
+
 cat << 'EOF' > config/includes.chroot/etc/skel/.bashrc
 if [ -f /etc/bashrc ]; then
   . /etc/bashrc
 fi
-
-echo "Secure Disk Eraser"
+echo "Secure Disk Eraser (32-bit)"
 echo "Type 'sudo de' to use the Secure Disk Eraser program"
-
-if grep -q "boot=live" /proc/cmdline; then
-  if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Live mode detected. Starting Secure Disk Eraser..."
-    sudo /usr/local/bin/de &
-    sleep 2
-    exit 0
-  fi
-fi
 EOF
 
-mkdir -p config/includes.chroot/etc/kbd/
-cat << 'EOF' > config/includes.chroot/etc/kbd/config
-SCREEN_BLANKING=0
-EOF
+# ─────────────────────────────────────────────────────────────────────────────
 
 echo "Configuring boot menu..."
 mkdir -p config/includes.binary/isolinux
@@ -270,30 +261,16 @@ TIMEOUT 50
 MENU TITLE Secure Disk Eraser (32-bit) - Boot Menu
 
 LABEL live
-  MENU LABEL Start Live Environment
+  MENU LABEL Start Disk Eraser
   MENU DEFAULT
   KERNEL /live/vmlinuz
   APPEND initrd=/live/initrd.img boot=live config components
 
 LABEL live-safe
-  MENU LABEL Start Live Environment - Safe Mode (nomodeset)
+  MENU LABEL Start Disk Eraser - Safe Mode (nomodeset)
   KERNEL /live/vmlinuz
   APPEND initrd=/live/initrd.img boot=live config components nomodeset
-
-LABEL install
-  MENU LABEL Install to Disk
-  KERNEL /live/vmlinuz
-  APPEND initrd=/live/initrd.img boot=live config components calamares
 EOF
-
-mkdir -p config/includes.chroot/etc/profile.d/
-cat << 'EOF' > config/includes.chroot/etc/profile.d/autostart-calamares.sh
-#!/bin/bash
-if grep -q "calamares" /proc/cmdline; then
-  calamares --debug
-fi
-EOF
-chmod +x config/includes.chroot/etc/profile.d/autostart-calamares.sh
 
 echo "Building the ISO..."
 sudo lb build

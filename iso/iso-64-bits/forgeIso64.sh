@@ -4,7 +4,7 @@
 set -e
 
 # Variables
-ISO_NAME="$(pwd)/diskEraser-v5.4-64bits.iso"
+ISO_NAME="$(pwd)/diskEraser-v6.0-64bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../../code"
 

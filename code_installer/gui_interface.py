@@ -108,7 +108,7 @@ class DiskEraserInstallerGUI:
         ttk.Label(disk_frame, textvariable=self._ssd_disclaimer_var,
                   foreground="blue", wraplength=260).pack(side=tk.BOTTOM, pady=2)
 
-        ttk.Button(disk_frame, text="↺ Actualiser les disques",
+        ttk.Button(disk_frame, text="↺  Actualiser les disques",
                    command=self._refresh_disks).pack(pady=8)
 
         # ── Colonne droite : options + actions ──
@@ -151,16 +151,16 @@ class DiskEraserInstallerGUI:
                                      command=self._start_erasure)
         self._start_btn.pack(fill=tk.X, pady=3)
 
-        self._stop_btn = ttk.Button(actions_frame, text="⬛ Arrêter",
+        self._stop_btn = ttk.Button(actions_frame, text="■  Arrêter",
                                     command=self._stop_erasure, state="disabled")
         self._stop_btn.pack(fill=tk.X, pady=3)
 
-        ttk.Button(actions_frame, text="🗂  Formater uniquement (sans effacer)",
+        ttk.Button(actions_frame, text="≡  Formater uniquement (sans effacer)",
                    command=self._format_only).pack(fill=tk.X, pady=3)
 
         ttk.Separator(actions_frame).pack(fill=tk.X, pady=6)
 
-        ttk.Button(actions_frame, text="🔒 Administration",
+        ttk.Button(actions_frame, text="◆  Administration",
                    command=self._open_admin).pack(fill=tk.X, pady=3)
 
         # Barre de progression + statut

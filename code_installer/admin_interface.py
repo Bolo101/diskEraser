@@ -173,10 +173,10 @@ class AdminInterface(tk.Toplevel):
         pdf_frame = ttk.LabelFrame(self, text="Rapports PDF", padding=10)
         pdf_frame.pack(fill=tk.X, padx=14, pady=4)
 
-        ttk.Button(pdf_frame, text="📄 Générer rapport session (PDF)",
+        ttk.Button(pdf_frame, text="→  Générer rapport session (PDF)",
                    command=self._gen_session_pdf, width=38).pack(
             side=tk.LEFT, padx=6)
-        ttk.Button(pdf_frame, text="📚 Générer logs complets (PDF)",
+        ttk.Button(pdf_frame, text="→  Générer logs complets (PDF)",
                    command=self._gen_full_pdf, width=38).pack(
             side=tk.LEFT, padx=6)
 
@@ -185,17 +185,17 @@ class AdminInterface(tk.Toplevel):
         exp_frame.pack(fill=tk.X, padx=14, pady=4)
 
         ttk.Button(exp_frame,
-                   text="💾 Exporter fichiers (PDF ou logs bruts) vers clé USB…",
+                   text="→  Exporter fichiers (PDF ou logs bruts) vers clé USB…",
                    command=self._open_export, width=55).pack()
 
         # ── Maintenance ──
         maint_frame = ttk.LabelFrame(self, text="Maintenance", padding=10)
         maint_frame.pack(fill=tk.X, padx=14, pady=4)
 
-        ttk.Button(maint_frame, text="🗑  Purger tous les logs",
+        ttk.Button(maint_frame, text="×  Purger tous les logs",
                    command=self._purge_logs, width=28).grid(
             row=0, column=0, padx=6, pady=4, sticky="w")
-        ttk.Button(maint_frame, text="🔑 Changer le mot de passe admin",
+        ttk.Button(maint_frame, text="◇  Changer le mot de passe admin",
                    command=self._change_password, width=32).grid(
             row=0, column=1, padx=6, pady=4, sticky="w")
 
@@ -203,13 +203,13 @@ class AdminInterface(tk.Toplevel):
         sys_frame = ttk.LabelFrame(self, text="Système", padding=10)
         sys_frame.pack(fill=tk.X, padx=14, pady=4)
 
-        ttk.Button(sys_frame, text="⏻  Éteindre",
+        ttk.Button(sys_frame, text="■  Éteindre",
                    command=self._shutdown, width=18).grid(
             row=0, column=0, padx=8, pady=4)
         ttk.Button(sys_frame, text="↺  Redémarrer",
                    command=self._reboot, width=18).grid(
             row=0, column=1, padx=8, pady=4)
-        ttk.Button(sys_frame, text="🖥  Quitter vers l'OS",
+        ttk.Button(sys_frame, text="←  Quitter vers l'OS",
                    command=self._exit_to_os, width=20).grid(
             row=0, column=2, padx=8, pady=4)
 

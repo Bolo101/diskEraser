@@ -17,14 +17,17 @@ from subprocess import CalledProcessError, SubprocessError
 from tkinter import messagebox, ttk
 from typing import Dict, List
 
+from subprocess import CalledProcessError, SubprocessError
+
 from admin_interface import open_admin_panel
 from disk_erase import get_disk_serial, is_ssd
-from disk_operations import process_disk
+from disk_format import format_disk
+from disk_operations import get_active_disk, process_disk
+from disk_partition import partition_disk
 from log_handler import (log_error, log_info, log_erasure_process_completed,
                           log_erasure_process_stopped, session_start)
-from disk_operations import get_active_disk
 from stats_manager import get_wipe_count
-from utils import get_disk_list, get_base_disk
+from utils import get_base_disk, get_disk_list
 
 
 class DiskEraserInstallerGUI:
@@ -151,6 +154,9 @@ class DiskEraserInstallerGUI:
         self._stop_btn = ttk.Button(actions_frame, text="⬛ Arrêter",
                                     command=self._stop_erasure, state="disabled")
         self._stop_btn.pack(fill=tk.X, pady=3)
+
+        ttk.Button(actions_frame, text="🗂  Formater uniquement (sans effacer)",
+                   command=self._format_only).pack(fill=tk.X, pady=3)
 
         ttk.Separator(actions_frame).pack(fill=tk.X, pady=6)
 
@@ -319,6 +325,101 @@ class DiskEraserInstallerGUI:
 
         process_disk(name, fs, passes, use_crypto, crypto_fill,
                      log_func=self._gui_log)
+
+    def _format_only(self) -> None:
+        """Partitionne et formate les disques sélectionnés sans effacement préalable."""
+        selected = [dev for dev, var in self.disk_vars.items() if var.get()]
+        if not selected:
+            messagebox.showwarning("Attention", "Aucun disque sélectionné.", parent=self.root)
+            return
+
+        fs_choice = self.filesystem_var.get()
+        names = "\n".join(f"  • {d}" for d in selected)
+        if not messagebox.askyesno(
+            "Confirmation – Formatage uniquement",
+            f"AVERTISSEMENT : Les disques suivants seront partitionnés\n"
+            f"et formatés en {fs_choice} SANS effacement sécurisé préalable :\n\n"
+            f"{names}\n\n"
+            "Toutes les données seront perdues.\n\n"
+            "Confirmer ?",
+            parent=self.root,
+        ):
+            return
+
+        self._start_btn.configure(state="disabled")
+        self._progress_var.set(0)
+        self._status_var.set("Formatage en cours…")
+
+        threading.Thread(
+            target=self._format_disks_thread,
+            args=(selected, fs_choice),
+            daemon=True,
+        ).start()
+
+    def _format_disks_thread(self, disks: list, fs_choice: str) -> None:
+        """Thread d'exécution du formatage en parallèle."""
+        total = len(disks)
+        done  = 0
+        log_info(f"Formatage uniquement – {total} disque(s) en {fs_choice}")
+
+        try:
+            with ThreadPoolExecutor(max_workers=max(1, total)) as pool:
+                futures = {
+                    pool.submit(self._format_single_disk, dev, fs_choice): dev
+                    for dev in disks
+                }
+                for future in as_completed(futures):
+                    dev = futures[future]
+                    try:
+                        future.result()
+                        done += 1
+                        self._update_progress(done / total * 100)
+                        self._status_var.set(f"Formaté : {done}/{total} disques")
+                    except Exception as exc:
+                        msg = f"Erreur formatage {dev} : {exc}"
+                        self._gui_log(msg)
+                        log_error(msg)
+        except Exception as exc:
+            msg = f"Erreur générale formatage : {exc}"
+            self._gui_log(msg)
+            log_error(msg)
+
+        log_info("Formatage uniquement terminé.")
+        self.root.after(0, self._on_format_done)
+
+    def _format_single_disk(self, dev: str, fs_choice: str) -> None:
+        """Partitionne puis formate un seul disque."""
+        name = dev.replace("/dev/", "")
+        try:
+            disk_id = get_disk_serial(name)
+        except (CalledProcessError, SubprocessError, FileNotFoundError, OSError):
+            disk_id = name
+
+        self._gui_log(f"Partitionnement de {disk_id}…")
+        log_info(f"Partitionnement (format only) : {disk_id}")
+        try:
+            partition_disk(name)
+        except (CalledProcessError, FileNotFoundError, PermissionError, OSError) as exc:
+            msg = f"Erreur partitionnement {disk_id} : {exc}"
+            self._gui_log(msg)
+            log_error(msg)
+            raise
+
+        self._gui_log(f"Formatage de {disk_id} en {fs_choice}…")
+        log_info(f"Formatage (format only) : {disk_id} → {fs_choice}")
+        try:
+            format_disk(name, fs_choice)
+            self._gui_log(f"✓ {disk_id} formaté en {fs_choice}")
+            log_info(f"Formatage terminé : {disk_id}")
+        except (CalledProcessError, FileNotFoundError, PermissionError, OSError) as exc:
+            msg = f"Erreur formatage {disk_id} : {exc}"
+            self._gui_log(msg)
+            log_error(msg)
+            raise
+
+    def _on_format_done(self) -> None:
+        self._start_btn.configure(state="normal")
+        messagebox.showinfo("Terminé", "Formatage terminé.", parent=self.root)
 
     def _on_erasure_done(self) -> None:
         self._erasure_running = False

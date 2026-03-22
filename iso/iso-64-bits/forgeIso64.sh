@@ -11,7 +11,7 @@
 set -e
 
 # ── Variables ──────────────────────────────────────────────────────────────────
-ISO_NAME="$(pwd)/diskEraser-v7.0-64bits.iso"
+ISO_NAME="$(pwd)/diskEraser-v6.0-64bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../../code"
 CODE_INSTALLER_DIR="$(pwd)/../../code_installer"

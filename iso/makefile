@@ -37,8 +37,8 @@ clean:
 
 help:
 	@echo "Available commands:"
-	@echo "  make all     - Build XFCE ISO (64-bit)"
-	@echo "  make 32      - Build XFCE ISO (32-bit)"
+	@echo "  make all     - Build 64-bits ISO"
+	@echo "  make 32      - Build 32-bits ISO"
 	@echo "  make all-iso - Build ALL ISOs sequentially"
 	@echo "  make clean   - Remove the build directories in all folders"
 

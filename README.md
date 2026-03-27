@@ -194,13 +194,11 @@ sudo diskeraser --cli     # CLI mode
     ```
     - **Pre-built ISO**
 
-    Download pre-built: [Disk Eraser ISO v5.4](https://archive.org/details/diskEraser-v5.4)
+    Download pre-built: [Disk Eraser ISO v6.0](https://archive.org/details/diskEraser-v6.0)
 
       ```txt
-      79ecba690af4f888c53cfb5852fbd194af1f3679460f31a7b82d396da74f5356  diskEraser-v5.4-KDE-32bits.iso
-      6e686997aede1d3b74bd9a37adc3d9cbd101ac6d64025665d49523a601491239  diskEraser-v5.4-KDE-64bits.iso
-      48ba303f98f6e63a35b3eec67e5c63aa1441976137b2175a081afb88725ba1b3  diskEraser-v5.4-XFCE-32bits.iso
-      7a515267f0df68ec83ef420378a9d2ec8efbf75a5522a2edf581a898b7ffa016  diskEraser-v5.4-XFCE-64bits.iso
+      - diskEraser-v6.0-64bits.iso : c57c09b9356bd06ce0ee8c0e10e942fe1648ab9cb403e4004a2873e062dd47bc
+      - diskEraser-v6.0-32bits.iso : a2e8c9cb17ba0ff46677055e39e992cd5b24ce239a73bba55541edd2835ca6ef
       ```
 
 2. **Flash to USB**:

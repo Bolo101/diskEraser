@@ -102,6 +102,40 @@ sudo systemctl restart systemd-udevd
 </div>
 ---
 
+
+## Live vs Installer mode
+Pre-built 64 bits ISO comes with two boot modes integrated.
+
+### Live mode
+Live mode is advised when virtualizing a machine by directly booting on the target system via a bootable USB key containing the ISO. The virtualization process runs entirely from the live environment without any installation required on the host machine.
+
+Users have access to all features, including the ability to export logs to an external storage device before shutting down the session.
+
+### Installer mode
+Installer mode is designed for use as a **fixed sanitizer workstation**, where physical drives removed from their original machines, or external devices, are connected directly to the station for sanitization. This mode is intended for a permanent, dedicated setup rather than on-site interventions.
+
+All features are available to the user, with the exception of the following operations which are **restricted to administrator access (password protected)**:
+
+| Protected action | Reason |
+|---|---|
+| Log export from the station | Prevent unauthorized data extraction |
+| Log purge | Preserve audit trail integrity |
+| System restart & shutdown | Ensure workstation availability |
+| Exiting kiosk mode | Maintain controlled environment |
+
+### Quick comparison
+
+| | Live mode | Installer mode |
+|---|---|---|
+| **Use case** | On-site, boot on target machine | Fixed workstation, attach external drives |
+| **Installation required** | No | Yes |
+| **Log export** | ✅ User | 🔒 Admin only |
+| **Log purge** | ✅ User | 🔒 Admin only |
+| **Restart / Shutdown** | ✅ User | 🔒 Admin only |
+| **Exit kiosk mode** | ✅ User | 🔒 Admin only |
+| **Erasure external drives** | ✅ User | ✅ User |
+| **Format external drives** | ✅ User | ✅ User |
+
 ## Prerequisites 📋
 
 - **Root privileges** (required for disk access)
@@ -113,6 +147,7 @@ sudo systemctl restart systemd-udevd
 ## Installation and Usage 🚀
 
 ### Using Python Code 🐍
+⚠️ **If you want to install system with admninistrative pannel, please use *code_installer* folder instead of *code* folder**
 
 ```bash
 git clone https://github.com/Bolo101/diskEraser.git

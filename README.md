@@ -97,9 +97,6 @@ sudo systemctl restart systemd-udevd
   - **Complete Operation History**: Maintain full audit trail of all disk operations
   - **PDF Export Capability**: Export logs to PDF format for printing or archiving
 
-<div style="display: flex; align-items: center;">
-  <img src="./img/gui" alt="GUI" width="600" style="margin-right: 20px;">
-</div>
 ---
 
 
@@ -110,6 +107,10 @@ Pre-built 64 bits ISO comes with two boot modes integrated.
 Live mode is advised when virtualizing a machine by directly booting on the target system via a bootable USB key containing the ISO. The virtualization process runs entirely from the live environment without any installation required on the host machine.
 
 Users have access to all features, including the ability to export logs to an external storage device before shutting down the session.
+
+<div style="display: flex; align-items: center;">
+  <img src="./img/gui.png" alt="GUI" width="600" style="margin-right: 20px;">
+</div>
 
 ### Installer mode
 Installer mode is designed for use as a **fixed sanitizer workstation**, where physical drives removed from their original machines, or external devices, are connected directly to the station for sanitization. This mode is intended for a permanent, dedicated setup rather than on-site interventions.
@@ -122,6 +123,10 @@ All features are available to the user, with the exception of the following oper
 | Log purge | Preserve audit trail integrity |
 | System restart & shutdown | Ensure workstation availability |
 | Exiting kiosk mode | Maintain controlled environment |
+
+<div style="display: flex; align-items: center;">
+  <img src="./img/gui_installer.png" alt="GUI" width="600" style="margin-right: 20px;">
+</div>
 
 ### Quick comparison
 

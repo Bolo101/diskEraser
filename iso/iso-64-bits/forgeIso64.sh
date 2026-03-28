@@ -35,9 +35,9 @@ sudo lb clean --purge || true
 #   syslinux  → boot BIOS / legacy MBR
 #   grub-efi  → boot UEFI  (raison du bug : avant on ne mettait que syslinux,
 #               donc le GRUB EFI généré automatiquement avait son menu par défaut)
-echo "=== Configuration live-build (Debian bookworm amd64) ==="
+echo "=== Configuration live-build (Debian Trixie amd64) ==="
 lb config \
-  --distribution=bookworm \
+  --distribution=trixie \
   --architectures=amd64 \
   --linux-packages=linux-image \
   --debian-installer=none \
@@ -48,10 +48,10 @@ lb config \
 # ── Dépôts ─────────────────────────────────────────────────────────────────────
 mkdir -p config/archives
 cat << 'EOF' > config/archives/debian.list.chroot
-deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
-deb-src http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
-deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
-deb-src http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb-src http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
+deb-src http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
 EOF
 
 # ── Paquets ────────────────────────────────────────────────────────────────────

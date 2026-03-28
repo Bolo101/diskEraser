@@ -97,10 +97,49 @@ sudo systemctl restart systemd-udevd
   - **Complete Operation History**: Maintain full audit trail of all disk operations
   - **PDF Export Capability**: Export logs to PDF format for printing or archiving
 
-<div style="display: flex; align-items: center;">
-  <img src="./img/gui" alt="GUI" width="600" style="margin-right: 20px;">
-</div>
 ---
+
+
+## Live vs Installer mode
+Pre-built 64 bits ISO comes with two boot modes integrated.
+
+### Live mode
+Live mode is advised when virtualizing a machine by directly booting on the target system via a bootable USB key containing the ISO. The virtualization process runs entirely from the live environment without any installation required on the host machine.
+
+Users have access to all features, including the ability to export logs to an external storage device before shutting down the session.
+
+<div style="display: flex; align-items: center;">
+  <img src="./img/gui.png" alt="GUI" width="600" style="margin-right: 20px;">
+</div>
+
+### Installer mode
+Installer mode is designed for use as a **fixed sanitizer workstation**, where physical drives removed from their original machines, or external devices, are connected directly to the station for sanitization. This mode is intended for a permanent, dedicated setup rather than on-site interventions.
+
+All features are available to the user, with the exception of the following operations which are **restricted to administrator access (password protected)**:
+
+| Protected action | Reason |
+|---|---|
+| Log export from the station | Prevent unauthorized data extraction |
+| Log purge | Preserve audit trail integrity |
+| System restart & shutdown | Ensure workstation availability |
+| Exiting kiosk mode | Maintain controlled environment |
+
+<div style="display: flex; align-items: center;">
+  <img src="./img/gui_installer.png" alt="GUI" width="600" style="margin-right: 20px;">
+</div>
+
+### Quick comparison
+
+| | Live mode | Installer mode |
+|---|---|---|
+| **Use case** | On-site, boot on target machine | Fixed workstation, attach external drives |
+| **Installation required** | No | Yes |
+| **Log export** | ✅ User | 🔒 Admin only |
+| **Log purge** | ✅ User | 🔒 Admin only |
+| **Restart / Shutdown** | ✅ User | 🔒 Admin only |
+| **Exit kiosk mode** | ✅ User | 🔒 Admin only |
+| **Erasure external drives** | ✅ User | ✅ User |
+| **Format external drives** | ✅ User | ✅ User |
 
 ## Prerequisites 📋
 
@@ -113,6 +152,7 @@ sudo systemctl restart systemd-udevd
 ## Installation and Usage 🚀
 
 ### Using Python Code 🐍
+⚠️ **If you want to install system with admninistrative pannel, please use *code_installer* folder instead of *code* folder**
 
 ```bash
 git clone https://github.com/Bolo101/diskEraser.git
@@ -154,13 +194,11 @@ sudo diskeraser --cli     # CLI mode
     ```
     - **Pre-built ISO**
 
-    Download pre-built: [Disk Eraser ISO v5.4](https://archive.org/details/diskEraser-v5.4)
+    Download pre-built: [Disk Eraser ISO v6.0](https://archive.org/details/diskEraser-v6.0)
 
       ```txt
-      79ecba690af4f888c53cfb5852fbd194af1f3679460f31a7b82d396da74f5356  diskEraser-v5.4-KDE-32bits.iso
-      6e686997aede1d3b74bd9a37adc3d9cbd101ac6d64025665d49523a601491239  diskEraser-v5.4-KDE-64bits.iso
-      48ba303f98f6e63a35b3eec67e5c63aa1441976137b2175a081afb88725ba1b3  diskEraser-v5.4-XFCE-32bits.iso
-      7a515267f0df68ec83ef420378a9d2ec8efbf75a5522a2edf581a898b7ffa016  diskEraser-v5.4-XFCE-64bits.iso
+      - diskEraser-v6.0-64bits.iso : c57c09b9356bd06ce0ee8c0e10e942fe1648ab9cb403e4004a2873e062dd47bc
+      - diskEraser-v6.0-32bits.iso : a2e8c9cb17ba0ff46677055e39e992cd5b24ce239a73bba55541edd2835ca6ef
       ```
 
 2. **Flash to USB**:

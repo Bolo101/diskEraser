@@ -185,9 +185,7 @@ sudo diskeraser --cli     # CLI mode
     ```bash
     cd iso/
     make
-    make xfce32  # 32 bits XFCE environment (lighter)
-    make kde     # KDE 64 bits environment
-    make kde32   # KDE 32 bits environment
+    make 32      # 32 bits environment (no installer mode)
     make all-iso # All 4 ISOs generated
     make clean   # Clean build files
     make help    # Display helper message
@@ -197,8 +195,8 @@ sudo diskeraser --cli     # CLI mode
     Download pre-built: [Disk Eraser ISO v6.0](https://archive.org/details/diskEraser-v6.0)
 
       ```txt
-      - diskEraser-v6.0-64bits.iso : 06c05782c4268be12b443c42048bc585058981521337e3e57ea886737bea4632
-      - diskEraser-v6.0-32bits.iso : a2e8c9cb17ba0ff46677055e39e992cd5b24ce239a73bba55541edd2835ca6ef
+      - diskEraser-v6.0-64bits.iso : 193345490d3f91d0388e9e4ed0e66e7fcd7892e46a16363d503788702148b20b
+      - diskEraser-v6.0-32bits.iso : 820df4f047795b6662d70bf32c4475743f595ec17774119db5ec6cd7b8c694c4
       ```
 
 2. **Flash to USB**:

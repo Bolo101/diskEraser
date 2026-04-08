@@ -1,6 +1,7 @@
 """
 gui_interface.py (installer) – Interface kiosque de blanchiment.
 
+
 Différences par rapport au mode live :
   - Pas d'accès direct aux PDF/logs (réservé à l'admin).
   - Bouton "Administration" ouvre le panneau sécurisé par mot de passe.
@@ -17,7 +18,9 @@ from subprocess import CalledProcessError, SubprocessError
 from tkinter import messagebox, ttk
 from typing import Dict, List
 
+
 from subprocess import CalledProcessError, SubprocessError
+
 
 from admin_interface import open_admin_panel
 from disk_erase import get_disk_serial, is_ssd
@@ -30,8 +33,11 @@ from stats_manager import get_wipe_count
 from utils import get_base_disk, get_disk_list
 
 
+
 class DiskEraserInstallerGUI:
     """Fenêtre principale de la borne de blanchiment (mode installé)."""
+
+    _REFRESH_INTERVAL_MS = 3000
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -51,6 +57,10 @@ class DiskEraserInstallerGUI:
         self.active_disk  = get_active_disk()
         self._erasure_running = False
 
+        # Ensemble des disques actuellement en cours d'effacement
+        # (utilisé pour conserver leur état coché pendant le refresh automatique)
+        self._erasing_devs: set = set()
+
         # Vérification root
         if os.geteuid() != 0:
             messagebox.showerror("Erreur", "Ce programme doit être lancé en root !")
@@ -60,6 +70,8 @@ class DiskEraserInstallerGUI:
         session_start()
         self._build_ui()
         self._refresh_disks()
+        # Lance la boucle de rafraîchissement automatique
+        self.root.after(self._REFRESH_INTERVAL_MS, self._auto_refresh_disks)
         self._update_wipe_counter()
 
     # ── Construction UI ────────────────────────────────────────────────────────
@@ -107,9 +119,6 @@ class DiskEraserInstallerGUI:
                   foreground="red",  wraplength=260).pack(side=tk.BOTTOM, pady=2)
         ttk.Label(disk_frame, textvariable=self._ssd_disclaimer_var,
                   foreground="blue", wraplength=260).pack(side=tk.BOTTOM, pady=2)
-
-        ttk.Button(disk_frame, text="↺  Actualiser les disques",
-                   command=self._refresh_disks).pack(pady=8)
 
         # ── Colonne droite : options + actions ──
         right = ttk.Frame(main_frame)
@@ -197,10 +206,20 @@ class DiskEraserInstallerGUI:
             self._passes_frame.pack_forget()
             self._crypto_fill_frame.pack(fill=tk.X, pady=2)
 
-    # ── Rafraîchissement des disques ───────────────────────────────────────────
+
+    # ── Rafraîchissement automatique des disques ───────────────────────────────
+    def _auto_refresh_disks(self) -> None:
+        if not self._erasure_running:
+            self._refresh_disks()
+        self.root.after(self._REFRESH_INTERVAL_MS, self._auto_refresh_disks)
+
     def _refresh_disks(self) -> None:
         for w in self.scrollable_disk_frame.winfo_children():
             w.destroy()
+
+        previous_selection: Dict[str, bool] = {
+            dev: var.get() for dev, var in self.disk_vars.items()
+        }
         self.disk_vars.clear()
 
         self.disks = get_disk_list()
@@ -224,11 +243,20 @@ class DiskEraserInstallerGUI:
                 continue
 
             label = f"{name}  {disk.get('size', '')}  {disk.get('model', '')}  [{disk.get('label', '')}]"
-            var = tk.BooleanVar(value=False)
+
+            was_checked = previous_selection.get(dev, False)
+            is_erasing  = dev in self._erasing_devs
+            var = tk.BooleanVar(value=was_checked or is_erasing)
             self.disk_vars[dev] = var
 
-            cb = ttk.Checkbutton(self.scrollable_disk_frame, text=label, variable=var,
-                                  command=lambda d=name: self._on_disk_toggle(d))
+            cb = ttk.Checkbutton(
+                self.scrollable_disk_frame,
+                text=label,
+                variable=var,
+                command=lambda d=name: self._on_disk_toggle(d),
+            )
+            if is_erasing:
+                cb.configure(state="disabled")
             cb.pack(anchor="w", padx=6, pady=2)
 
             if is_ssd(name):
@@ -274,6 +302,7 @@ class DiskEraserInstallerGUI:
             return
 
         self._erasure_running = True
+        self._erasing_devs = set(selected)
         self._start_btn.configure(state="disabled")
         self._stop_btn.configure(state="normal")
         self._progress_var.set(0)
@@ -285,6 +314,7 @@ class DiskEraserInstallerGUI:
 
     def _stop_erasure(self) -> None:
         self._erasure_running = False
+        self._erasing_devs.clear()
         self._status_var.set("Arrêt demandé…")
         log_erasure_process_stopped()
         self._start_btn.configure(state="normal")
@@ -305,9 +335,11 @@ class DiskEraserInstallerGUI:
                     try:
                         future.result()
                         done += 1
+                        self._erasing_devs.discard(dev)
                         self._update_progress(done / total * 100)
                         self._status_var.set(f"Terminé : {done}/{total} disques")
                     except Exception as exc:
+                        self._erasing_devs.discard(dev)
                         self._gui_log(f"Erreur sur {dev} : {exc}")
                         log_error(f"Erreur sur {dev} : {exc}")
         except Exception as exc:
@@ -423,6 +455,7 @@ class DiskEraserInstallerGUI:
 
     def _on_erasure_done(self) -> None:
         self._erasure_running = False
+        self._erasing_devs.clear()
         self._start_btn.configure(state="normal")
         self._stop_btn.configure(state="disabled")
         messagebox.showinfo("Terminé",
@@ -464,7 +497,6 @@ class DiskEraserInstallerGUI:
             except tk.TclError:
                 pass
         self.root.after(0, _insert)
-
 
 # ── Point d'entrée ─────────────────────────────────────────────────────────────
 

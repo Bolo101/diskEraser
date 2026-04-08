@@ -17,7 +17,7 @@ from typing import Dict, List
 class DiskEraserGUI:
 
     # Intervalle de rafraîchissement automatique de la liste des disques (ms)
-    _REFRESH_INTERVAL_MS = 3000
+    _REFRESH_INTERVAL_MS = 1000
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root

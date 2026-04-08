@@ -37,7 +37,7 @@ from utils import get_base_disk, get_disk_list
 class DiskEraserInstallerGUI:
     """Fenêtre principale de la borne de blanchiment (mode installé)."""
 
-    _REFRESH_INTERVAL_MS = 3000
+    _REFRESH_INTERVAL_MS = 1000
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root

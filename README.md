@@ -195,8 +195,8 @@ sudo diskeraser --cli     # CLI mode
     Download pre-built: [Disk Eraser ISO v6.0](https://archive.org/details/diskEraser-v6.0)
 
       ```txt
-      - diskEraser-v6.0-64bits.iso : 75a0651d3de247f394bb81158556d7d676ce15e57e7efb57d74462c67cdfe828
-      - diskEraser-v6.0-32bits.iso : 2056e8b9873573f6a1e97b837146f07d79198476c48451e8cb15fdc2bd6e3f27
+      - diskEraser-v6.0-64bits.iso : f4e1280807a3051471a93a523640aff3e7a74ccb65cd8160ba3966cd31240653
+      - diskEraser-v6.0-32bits.iso : 6772e31d597771a351a0341dfd69b247965f613266f1cf261735cf4290fd9ffc
       ```
 
 2. **Flash to USB**:

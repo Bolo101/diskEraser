@@ -250,6 +250,14 @@ class DiskEraserInstallerGUI:
                     f"⚠ {name} est le disque système et ne peut pas être effacé.")
                 continue
 
+            disk_is_ssd = False
+            try:
+                disk_is_ssd = is_ssd(name)
+            except Exception:
+                pass
+
+            text_color = "blue" if disk_is_ssd else "black"
+
             label = f"{name}  {disk.get('size', '')}  {disk.get('model', '')}  [{disk.get('label', '')}]"
 
             was_checked = previous_selection.get(dev, False)
@@ -257,17 +265,21 @@ class DiskEraserInstallerGUI:
             var = tk.BooleanVar(value=was_checked or is_erasing)
             self.disk_vars[dev] = var
 
-            cb = ttk.Checkbutton(
+            # tk.Checkbutton (et non ttk) pour supporter l'attribut foreground
+            cb = tk.Checkbutton(
                 self.scrollable_disk_frame,
                 text=label,
                 variable=var,
+                foreground=text_color,
+                selectcolor="white",
+                activeforeground=text_color,
                 command=lambda d=name: self._on_disk_toggle(d),
             )
             if is_erasing:
                 cb.configure(state="disabled")
             cb.pack(anchor="w", padx=6, pady=2)
 
-            if is_ssd(name):
+            if disk_is_ssd:
                 has_ssd = True
 
         if has_ssd:

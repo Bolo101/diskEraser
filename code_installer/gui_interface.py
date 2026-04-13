@@ -479,7 +479,7 @@ class DiskEraserInstallerGUI:
         self._start_btn.configure(state="normal")
         self._stop_btn.configure(state="disabled")
         messagebox.showinfo("Terminé",
-            "L'effacement est terminé.\n," \
+            "L'effacement est terminé.\n" \
             "Vous pouvez maintenant retirer les supports.",
             parent=self.root)
 

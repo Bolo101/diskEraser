@@ -55,17 +55,23 @@ def _apply_admin_styles(root: tk.Widget) -> None:
     except tk.TclError:
         pass
 
-    style.configure("TFrame",       background=_BG)
-    style.configure("TLabel",       background=_BG, font=("Helvetica", 10))
-    style.configure("TEntry",       fieldbackground="white", font=("Helvetica", 10))
-    style.configure("TScrollbar",   background="#c0c7d0", troughcolor=_BG)
+    _FG = "#1a1a2e"   # texte sombre pour fonds clairs
+
+    style.configure("TFrame",     background=_BG)
+    style.configure("TLabel",     background=_BG, foreground=_FG,
+                    font=("Helvetica", 10))
+    style.map("TLabel",           foreground=[], background=[])
+    style.configure("TEntry",     fieldbackground="white", foreground=_FG,
+                    selectbackground="#2980b9", selectforeground="white",
+                    insertcolor=_FG, font=("Helvetica", 10))
+    style.map("TEntry",           foreground=[], fieldbackground=[])
+    style.configure("TScrollbar", background="#c0c7d0", troughcolor=_BG)
     style.configure("TLabelframe",
                     background=_BG, bordercolor="#c0c7d0",
                     relief="solid", borderwidth=1)
     style.configure("TLabelframe.Label",
-                    background=_BG,
-                    font=("Helvetica", 10, "bold"),
-                    foreground=_LF_FG)
+                    background=_BG, foreground=_LF_FG,
+                    font=("Helvetica", 10, "bold"))
 
     style.configure("AdminHeader.TFrame", background=_HEADER_BG)
     style.configure("AdminHeader.TLabel",

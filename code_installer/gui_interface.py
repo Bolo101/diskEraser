@@ -109,6 +109,21 @@ class DiskEraserGUI:
             relief='flat',
             padding=6,
         )
+        # Bouton Administration : fond bleu foncé, texte blanc, lisible au hover
+        style.configure(
+            'Admin.TButton',
+            background='#1e3a5f',
+            foreground='white',
+            font=('Segoe UI', 10, 'bold'),
+            borderwidth=0,
+            padding=(12, 7),
+            relief='flat',
+        )
+        style.map(
+            'Admin.TButton',
+            background=[('active', '#2a5080'), ('pressed', '#163050')],
+            foreground=[('active', 'white'), ('pressed', 'white')],
+        )
 
     def _set_status(self, text: str, tone: str = 'idle') -> None:
         color = {
@@ -447,6 +462,7 @@ class DiskEraserGUI:
             inner,
             text='◆  Administration',
             command=self._open_admin,
+            style='Admin.TButton',
         ).pack(fill=tk.X, pady=3)
 
         self._update_wipe_counter()

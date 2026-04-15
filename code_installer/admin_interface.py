@@ -78,6 +78,28 @@ def _apply_admin_styles(root: tk.Widget) -> None:
                     background=_HEADER_BG, foreground=_HEADER_FG,
                     font=("Helvetica", 15, "bold"))
 
+    # TButton de base : évite le fond blanc au hover hérité du thème sombre
+    style.configure("TButton",
+                    background=_BTN_SYS, foreground="white",
+                    font=("Helvetica", 10), borderwidth=0,
+                    padding=(10, 6), relief="flat")
+    style.map("TButton",
+              background=[("active", _BTN_SYS_A), ("pressed", _BTN_SYS_A),
+                          ("disabled", _BTN_SYS_D)],
+              foreground=[("active", "white"), ("pressed", "white"),
+                          ("disabled", "#ffffffaa")])
+
+    # Treeview (historique)
+    style.configure("History.Treeview",
+                    background="white", fieldbackground="white",
+                    foreground=_FG, font=("Helvetica", 10), rowheight=24)
+    style.configure("History.Treeview.Heading",
+                    background="#e8edf2", foreground=_LF_FG,
+                    font=("Helvetica", 10, "bold"))
+    style.map("History.Treeview",
+              background=[("selected", "#2980b9")],
+              foreground=[("selected", "white")])
+
     _abtn(style, "Action",  _BTN_ACTION,  _BTN_ACT_A,   _BTN_ACT_D)
     _abtn(style, "Danger",  _BTN_DANGER,  _BTN_DNG_A,   _BTN_DNG_D)
     _abtn(style, "Sys",     _BTN_SYS,     _BTN_SYS_A,   _BTN_SYS_D)
@@ -358,13 +380,6 @@ class AdminInterface(tk.Toplevel):
         _apply_admin_styles(win)
 
         cols = ("N°", "Date", "Disque", "FS", "Méthode")
-        style = ttk.Style(win)
-        style.configure("History.Treeview",
-                         background="white", fieldbackground="white",
-                         font=("Helvetica", 10), rowheight=24)
-        style.configure("History.Treeview.Heading",
-                         font=("Helvetica", 10, "bold"),
-                         background="#e8edf2", foreground=_LF_FG)
 
         tree = ttk.Treeview(win, columns=cols, show="headings",
                              height=15, style="History.Treeview")

@@ -662,20 +662,28 @@ class DiskEraserGUI:
         except Exception as e:
             self.update_gui_log(f"Erreur lors de la détection du disque actif : {str(e)}")
             active_base_disks = None
+
         active_physical_drives = set(active_base_disks) if active_base_disks else set()
 
-        if active_base_disks and not self.active_drive_logged and active_physical_drives:
+        if active_physical_drives and not self.active_drive_logged:
             log_info(f"Active physical devices: {active_physical_drives}")
             self.active_drive_logged = True
 
-        if active_physical_drives:
-            self.disclaimer_var.set(
-                "⚠ Le disque en rouge contient le système actif. L’effacer provoquera une panne système et une perte de données."
-            )
-        else:
-            self.disclaimer_var.set('')
+        filtered_disks = []
+        for disk in new_disks:
+            device_name = disk["device"].replace("/dev/", "")
+            try:
+                base_disk = get_base_disk(device_name)
+                if base_disk in active_physical_drives:
+                    continue
+            except Exception:
+                pass
+            filtered_disks.append(disk)
 
-        new_dev_set = {d['device'] for d in new_disks}
+        new_disks = filtered_disks
+        self.disclaimer_var.set("")
+
+        new_dev_set = {disk["device"] for disk in new_disks}
         old_dev_set = set(self._disk_rows.keys())
 
         added = new_dev_set - old_dev_set
@@ -685,33 +693,42 @@ class DiskEraserGUI:
         for dev in removed:
             self._remove_disk_row(dev)
 
-        new_disk_map = {d['device']: d for d in new_disks}
+        new_disk_map = {disk["device"]: disk for disk in new_disks}
+
         for dev in kept:
             self._update_disk_row(dev, new_disk_map[dev], active_physical_drives)
+
         for dev in added:
             self._create_disk_row(new_disk_map[dev], active_physical_drives)
 
         if not new_disks:
             if not self._disk_rows and not self.scrollable_disk_frame.winfo_children():
-                tk.Label(self.scrollable_disk_frame, text='Aucun disque détecté',
-                         bg=self._BG_ELEVATED, fg=self._TEXT_DIM,
-                         font=('Segoe UI', 10)).pack(pady=20)
-            self.disclaimer_var.set('')
-            self.ssd_disclaimer_var.set('')
-            self._disk_count_var.set('0 disque')
+                tk.Label(
+                    self.scrollable_disk_frame,
+                    text="Aucun disque détecté",
+                    bg=self._BG_ELEVATED,
+                    fg=self._TEXT_DIM,
+                    font=("Segoe UI", 10),
+                ).pack(pady=20)
+
+            self.disclaimer_var.set("")
+            self.ssd_disclaimer_var.set("")
+            self._disk_count_var.set("0 disque")
             return
 
         has_ssd = False
         for disk in new_disks:
             try:
-                if is_ssd(disk['device'].replace('/dev/', '')):
+                if is_ssd(disk["device"].replace("/dev/", "")):
                     has_ssd = True
                     break
             except Exception:
                 pass
+
         self.ssd_disclaimer_var.set(
-            "ℹ SSD détecté. L’effacement multi-passes peut user le support et n’est pas le meilleur choix. Privilégiez l’effacement cryptographique."
-            if has_ssd else ''
+            "SSD détecté. L’effacement multi-passes peut user le support et n’est pas le meilleur choix. "
+            "Privilégiez l’effacement cryptographique."
+            if has_ssd else ""
         )
 
         self.disks = new_disks

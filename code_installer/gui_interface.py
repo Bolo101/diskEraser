@@ -854,11 +854,6 @@ class DiskEraserGUI:
             'Voulez-vous vraiment éteindre le système ?\n\nTout travail non enregistré sera perdu.',
         ):
             return
-        if not messagebox.askyesno(
-            'Dernier avertissement',
-            'L’ordinateur va être arrêté immédiatement.\n\nVoulez-vous continuer ?',
-        ):
-            return
         try:
             log_info('System power off initiated by user')
             self.update_gui_log('Extinction du système…')
@@ -1240,11 +1235,6 @@ class DiskEraserGUI:
             f"Attention : vous êtes sur le point d’effacer de manière sécurisée les disques suivants {method_info} :\n\n{disk_list}\n\n"
             'Cette opération est irréversible et toutes les données seront perdues.\n\n'
             'Voulez-vous continuer ?',
-        ):
-            return
-        if not messagebox.askyesno(
-            'Dernier avertissement',
-            'Ceci est votre dernier avertissement.\n\nTous les disques sélectionnés vont être entièrement effacés.\n\nVoulez-vous continuer ?',
         ):
             return
 

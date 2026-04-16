@@ -858,11 +858,7 @@ class DiskEraserGUI:
             'Voulez-vous vraiment éteindre le système ?\n\nTout travail non enregistré sera perdu.',
         ):
             return
-        if not messagebox.askyesno(
-            'Dernier avertissement',
-            'L’ordinateur va être arrêté immédiatement.\n\nVoulez-vous continuer ?',
-        ):
-            return
+
         try:
             log_info('System power off initiated by user')
             self.update_gui_log('Extinction du système…')

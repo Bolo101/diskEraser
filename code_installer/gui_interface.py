@@ -71,6 +71,7 @@ class DiskEraserGUI:
         self._progress_detail_var = tk.StringVar(value="Aucune opération en cours")
         self._progress_stats_var = tk.StringVar(value="0 disque sélectionné")
         self._pending_unmount_dir = None
+        self._no_disk_label = None
 
         session_start()
 
@@ -109,7 +110,6 @@ class DiskEraserGUI:
             relief='flat',
             padding=6,
         )
-        # Bouton Administration : fond bleu foncé, texte blanc, lisible au hover
         style.configure(
             'Admin.TButton',
             background='#1e3a5f',
@@ -439,7 +439,6 @@ class DiskEraserGUI:
 
         self._divider(inner)
 
-        # Compteur de supports blanchis
         counter_frame = tk.Frame(inner, bg=self._SURFACE)
         counter_frame.pack(fill=tk.X, pady=(0, 4))
         tk.Label(
@@ -648,6 +647,25 @@ class DiskEraserGUI:
         self._disk_row_cache.pop(dev, None)
         self.disk_vars.pop(dev, None)
 
+    def _show_no_disk_message(self) -> None:
+        if self._no_disk_label is None or not self._no_disk_label.winfo_exists():
+            self._no_disk_label = tk.Label(
+                self.scrollable_disk_frame,
+                text="Aucun disque détecté",
+                bg=self._BG_ELEVATED,
+                fg=self._TEXT_DIM,
+                font=("Segoe UI", 10),
+            )
+            self._no_disk_label.pack(pady=20)
+
+    def _hide_no_disk_message(self) -> None:
+        if self._no_disk_label is not None:
+            try:
+                self._no_disk_label.destroy()
+            except Exception:
+                pass
+            self._no_disk_label = None
+
     def refresh_disks(self) -> None:
         try:
             new_disks = get_disk_list()
@@ -683,6 +701,9 @@ class DiskEraserGUI:
         new_disks = filtered_disks
         self.disclaimer_var.set("")
 
+        if new_disks:
+            self._hide_no_disk_message()
+
         new_dev_set = {disk["device"] for disk in new_disks}
         old_dev_set = set(self._disk_rows.keys())
 
@@ -702,15 +723,7 @@ class DiskEraserGUI:
             self._create_disk_row(new_disk_map[dev], active_physical_drives)
 
         if not new_disks:
-            if not self._disk_rows and not self.scrollable_disk_frame.winfo_children():
-                tk.Label(
-                    self.scrollable_disk_frame,
-                    text="Aucun disque détecté",
-                    bg=self._BG_ELEVATED,
-                    fg=self._TEXT_DIM,
-                    font=("Segoe UI", 10),
-                ).pack(pady=20)
-
+            self._show_no_disk_message()
             self.disclaimer_var.set("")
             self.ssd_disclaimer_var.set("")
             self._disk_count_var.set("0 disque")
@@ -1156,7 +1169,6 @@ class DiskEraserGUI:
         self._update_wipe_counter()
 
     def _block_close(self) -> None:
-        """Empêche la fermeture de la fenêtre sans passer par l'admin."""
         messagebox.showinfo(
             'Accès restreint',
             'Pour quitter l’application, utilisez le bouton Administration.',

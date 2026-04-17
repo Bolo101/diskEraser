@@ -1270,11 +1270,6 @@ class DiskEraserGUI:
             'Voulez-vous continuer ?',
         ):
             return
-        if not messagebox.askyesno(
-            'Dernier avertissement',
-            'Ceci est votre dernier avertissement.\n\nTous les disques sélectionnés vont être entièrement effacés.\n\nVoulez-vous continuer ?',
-        ):
-            return
 
         passes = 1
         if erase_method == 'overwrite':

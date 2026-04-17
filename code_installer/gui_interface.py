@@ -877,35 +877,6 @@ class DiskEraserGUI:
             log_error(error_msg)
             raise
 
-    def power_off_system(self) -> None:
-        import subprocess
-        if not messagebox.askyesno(
-            'Confirmer l’arrêt',
-            'Voulez-vous vraiment éteindre le système ?\n\nTout travail non enregistré sera perdu.',
-        ):
-            return
-        try:
-            log_info('System power off initiated by user')
-            self.update_gui_log('Extinction du système…')
-            session_end()
-            time.sleep(1)
-            subprocess.run(['poweroff'], check=True)
-        except subprocess.CalledProcessError as e:
-            error_msg = f"Erreur lors de l’exécution de la commande d’arrêt : {str(e)}"
-            messagebox.showerror('Erreur d’arrêt', error_msg)
-            self.update_gui_log(error_msg)
-            log_error(error_msg)
-        except FileNotFoundError:
-            error_msg = "Commande poweroff introuvable. Essayez 'shutdown -h now' manuellement."
-            messagebox.showerror('Commande introuvable', error_msg)
-            self.update_gui_log(error_msg)
-            log_error(error_msg)
-        except (PermissionError, IOError, OSError, MemoryError, ValueError, TypeError) as e:
-            error_msg = f"Erreur système pendant l’arrêt : {str(e)}"
-            messagebox.showerror('Erreur système', error_msg)
-            self.update_gui_log(error_msg)
-            log_error(error_msg)
-
     def _get_external_disks(self) -> list:
         import json as _json
         import subprocess as _sp
@@ -1174,13 +1145,6 @@ class DiskEraserGUI:
             'Pour quitter l’application, utilisez le bouton Administration.',
             parent=self.root,
         )
-
-    def exit_application(self) -> None:
-        exit_message = 'Application fermée par l’utilisateur via le bouton Quitter'
-        log_info(exit_message)
-        self.update_gui_log(exit_message)
-        session_end()
-        self.root.destroy()
 
     def toggle_fullscreen(self) -> None:
         try:

@@ -11,7 +11,7 @@
 set -e
 
 # ── Variables ──────────────────────────────────────────────────────────────────
-ISO_NAME="$(pwd)/diskEraser-v6.0-64bits.iso"
+ISO_NAME="$(pwd)/diskEraser-v7.0-64bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../../code"
 CODE_INSTALLER_DIR="$(pwd)/../../code_installer"
@@ -226,12 +226,9 @@ cat << 'EOF' > config/includes.chroot/etc/xdg/openbox/rc.xml
 <openbox_config xmlns="http://openbox.org/3.4/rc"
                 xmlns:xi="http://www.w3.org/2001/XInclude">
   <applications>
-    <application class="*">
-      <fullscreen>yes</fullscreen>
-      <decor>no</decor>
-      <maximized>yes</maximized>
-      <layer>above</layer>
-    </application>
+    <!-- Pas de fullscreen/maximized global : la fenetre principale gere
+         elle-meme son plein ecran ; les fenetres secondaires (pop-ups)
+         conservent ainsi leur taille naturelle. -->
   </applications>
   <keyboard>
     <keybind key="A-F4"><action name="Close"/></keybind>

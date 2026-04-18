@@ -197,13 +197,13 @@ class DiskEraserGUI:
 
         top_line = tk.Frame(left_head, bg=self._SURFACE)
         top_line.pack(anchor='w')
-        tk.Label(top_line, text='SECURE DISK ERASER', bg=self._SURFACE, fg=self._TEXT,
+        tk.Label(top_line, text='e-Broyeur', bg=self._SURFACE, fg=self._TEXT,
                  font=('Segoe UI', 18, 'bold')).pack(side=tk.LEFT)
         tk.Label(top_line, text='  vNext', bg=self._SURFACE, fg=self._ACCENT2,
                  font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, pady=(5, 0))
         tk.Label(
             left_head,
-            text='Effacement sécurisé, formatage et export de journaux dans une interface modernisée et sobre',
+            text='Effacement sécurisé pour supports mécaniques et électroniques, formatage et export de journaux.',
             bg=self._SURFACE,
             fg=self._TEXT_DIM,
             font=('Segoe UI', 9),
@@ -333,8 +333,6 @@ class DiskEraserGUI:
         opt_card = self._make_card(right_col, expand=True)
         inner = tk.Frame(opt_card, bg=self._SURFACE, padx=16, pady=14)
         inner.pack(fill=tk.BOTH, expand=True)
-
-        self._section_label(inner, 'Configuration', 'Mêmes boutons et mêmes options, présentation modernisée')
 
         self._section_label(inner, "Méthode d’effacement")
         for txt, val in [("Écrasement standard", "overwrite"),

@@ -214,7 +214,7 @@ class DiskEraserGUI:
         top_line.pack(anchor='w')
         tk.Label(top_line, text='e-Broyeur', bg=self._SURFACE, fg=self._TEXT,
                  font=('Segoe UI', 18, 'bold')).pack(side=tk.LEFT)
-        tk.Label(top_line, text='  vNext', bg=self._SURFACE, fg=self._ACCENT2,
+        tk.Label(top_line, text='  v7.0', bg=self._SURFACE, fg=self._ACCENT2,
                  font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, pady=(5, 0))
         tk.Label(
             left_head,
@@ -248,7 +248,7 @@ class DiskEraserGUI:
         disk_card = self._make_card(left_col, pady=(0, 10), expand=True)
         disk_inner = tk.Frame(disk_card, bg=self._SURFACE, padx=16, pady=14)
         disk_inner.pack(fill=tk.BOTH, expand=True)
-        self._section_label(disk_inner, 'Disques détectés', 'Même sélection qu’actuellement, présentation plus lisible')
+        self._section_label(disk_inner, 'Disques détectés')
 
         disk_card_header = tk.Frame(disk_inner, bg=self._SURFACE)
         disk_card_header.pack(fill=tk.X, pady=(0, 10))

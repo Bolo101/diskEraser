@@ -1,9 +1,9 @@
-# Disk Eraser - Outil d’effacement sécurisé et de formatage de disques 💽
+# e-Broyeur - Outil d’effacement sécurisé et de formatage de disques 💽
 
 <div style="display: flex; align-items: center;">
   <img src="./img/background" alt="Logo" width="120" style="margin-right: 20px;">
   <p>
-    <b>Disk Eraser</b> est un outil permettant d’effacer de manière sécurisée les données des supports de stockage, tout en offrant la possibilité de formater avec le système de fichiers de votre choix (EXT4, NTFS ou VFAT). Il prend en charge l’effacement parallèle de plusieurs disques avec un nombre configurable de passes d’écrasement pour une sanitisation approfondie des données.
+    <b>e-Broyeur</b> est un outil permettant d’effacer de manière sécurisée les données des supports de stockage, tout en offrant la possibilité de formater avec le système de fichiers de votre choix (EXT4, NTFS ou VFAT). Il prend en charge l’effacement parallèle de plusieurs disques avec un nombre configurable de passes d’écrasement pour une sanitisation approfondie des données.
   </p>
 </div>
 
@@ -153,8 +153,8 @@ Toutes les fonctionnalités sont disponibles pour l’utilisateur, à l’except
 ⚠️ **Si vous souhaitez installer le système avec un panneau d’administration, utilisez le dossier *code_installer* au lieu du dossier *code*.**
 
 ```bash
-git clone https://github.com/Bolo101/diskEraser.git
-cd diskEraser/code/python
+git clone https://github.com/Bolo101/e-broyeur.git
+cd e-broyeur/code/python
 sudo python3 main.py         # Mode GUI (par défaut)
 sudo python3 main.py --cli   # Mode ligne de commande
 ```
@@ -162,14 +162,14 @@ sudo python3 main.py --cli   # Mode ligne de commande
 ### Installation en tant que commande Linux 💻
 
 ```bash
-sudo mkdir -p /usr/local/bin/diskeraser
-sudo cp diskEraser/code/python/*.py /usr/local/bin/diskeraser
-sudo chmod +x /usr/local/bin/diskeraser/main.py
-sudo ln -s /usr/local/bin/diskeraser/main.py /usr/local/bin/diskeraser
+sudo mkdir -p /usr/local/bin/e-broyeur
+sudo cp e-broyeur/code/python/*.py /usr/local/bin/e-broyeur
+sudo chmod +x /usr/local/bin/e-broyeur/main.py
+sudo ln -s /usr/local/bin/e-broyeur/main.py /usr/local/bin/e-broyeur
 
 # Puis exécuter :
-sudo diskeraser           # Mode GUI
-sudo diskeraser --cli     # Mode CLI
+sudo e-broyeur           # Mode GUI
+sudo e-broyeur --cli     # Mode CLI
 ```
 
 ### Utilisation via ISO amorçable 💿
@@ -191,16 +191,16 @@ sudo diskeraser --cli     # Mode CLI
 
     - **ISO précompilée**
 
-    Télécharger la version précompilée : [Disk Eraser ISO v6.0](https://archive.org/details/diskEraser-v6.0)
+    Télécharger la version précompilée : [e-Broyeur ISO v7.0](https://archive.org/details/e-Broyeur-v7.0)
 
     ```txt
-    - diskEraser-v6.0-64bits.iso : f4e1280807a3051471a93a523640aff3e7a74ccb65cd8160ba3966cd31240653
-    - diskEraser-v6.0-32bits.iso : 6772e31d597771a351a0341dfd69b247965f613266f1cf261735cf4290fd9ffc
+    - e-Broyeur-v6.0-64bits.iso : f4e1280807a3051471a93a523640aff3e7a74ccb65cd8160ba3966cd31240653
+    - e-Broyeur-v6.0-32bits.iso : 6772e31d597771a351a0341dfd69b247965f613266f1cf261735cf4290fd9ffc
     ```
 
 2. **Flasher sur une clé USB** :
    ```bash
-   sudo dd if=secure_disk_eraser.iso of=/dev/sdX bs=4M status=progress
+   sudo dd if=e-Broyeur*.iso of=/dev/sdX bs=4M status=progress
    ```
 
 3. **Démarrer depuis la clé USB** et suivre les instructions à l’écran.

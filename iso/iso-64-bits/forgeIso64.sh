@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  forgeIso64.sh – ISO dual-boot Disk Eraser (64-bit)                          ║
+# ║  forgeIso64.sh – ISO dual-boot e-Broyeur (64-bit)                          ║
 # ║                                                                              ║
 # ║  Entrée 1 : Live       → OpenBox kiosque  (code/)                            ║
 # ║  Entrée 2 : Installer  → copie sur disque + XFCE kiosque (code_installer/)   ║
@@ -11,7 +11,7 @@
 set -e
 
 # ── Variables ──────────────────────────────────────────────────────────────────
-ISO_NAME="$(pwd)/diskEraser-v7.0-64bits.iso"
+ISO_NAME="$(pwd)/e-Broyeur-v7.0-64bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../../code"
 CODE_INSTALLER_DIR="$(pwd)/../../code_installer"
@@ -179,11 +179,11 @@ mkdir -p config/includes.chroot/usr/local/bin/
 cp -r "${CODE_DIR}"/* config/includes.chroot/usr/local/bin/ 2>/dev/null || true
 chmod +x config/includes.chroot/usr/local/bin/*.py 2>/dev/null || true
 
-cat << 'WRAPPER' > config/includes.chroot/usr/local/bin/de
+cat << 'WRAPPER' > config/includes.chroot/usr/local/bin/broyeur
 #!/bin/bash
 exec python3 /usr/local/bin/main.py "$@"
 WRAPPER
-chmod +x config/includes.chroot/usr/local/bin/de
+chmod +x config/includes.chroot/usr/local/bin/broyeur
 
 # ── Code Installer ────────────────────────────────────────────────────────────
 echo "=== Copie du code installer ==="
@@ -191,15 +191,15 @@ mkdir -p config/includes.chroot/usr/local/bin_installer/
 cp -r "${CODE_INSTALLER_DIR}"/* config/includes.chroot/usr/local/bin_installer/ 2>/dev/null || true
 chmod +x config/includes.chroot/usr/local/bin_installer/*.py 2>/dev/null || true
 
-cat << 'WRAPPER' > config/includes.chroot/usr/local/bin_installer/de-installer
+cat << 'WRAPPER' > config/includes.chroot/usr/local/bin_installer/broyeur-installer
 #!/bin/bash
 exec python3 /usr/local/bin_installer/main.py "$@"
 WRAPPER
-chmod +x config/includes.chroot/usr/local/bin_installer/de-installer
+chmod +x config/includes.chroot/usr/local/bin_installer/broyeur-installer
 
-mkdir -p config/includes.chroot/var/log/disk_eraser/pdf/
-mkdir -p config/includes.chroot/var/lib/disk_eraser/
-mkdir -p config/includes.chroot/etc/disk_eraser/
+mkdir -p config/includes.chroot/var/log/e-broyeur/pdf/
+mkdir -p config/includes.chroot/var/lib/e-broyeur/
+mkdir -p config/includes.chroot/etc/e-broyeur/
 
 # ── Sudo ──────────────────────────────────────────────────────────────────────
 mkdir -p config/includes.chroot/etc/sudoers.d/
@@ -238,7 +238,7 @@ EOF
 
 # Script dispatcher : LightDM appelle toujours ce script.
 # Il lit /proc/cmdline pour choisir live ou installateur.
-cat << 'EOF' > config/includes.chroot/usr/local/bin/de-session-live.sh
+cat << 'EOF' > config/includes.chroot/usr/local/bin/broyeur-session-live.sh
 #!/bin/bash
 xset s off -dpms 2>/dev/null || true
 xset s noblank   2>/dev/null || true
@@ -247,22 +247,22 @@ WM_PID=$!
 sleep 1
 
 if grep -q "installer=1" /proc/cmdline; then
-    xterm -title "Disk Eraser - Installateur" -fa "Monospace" -fs 12 \
+    xterm -title "E-Broyeur - Installateur" -fa "Monospace" -fs 12 \
           -e "sudo /usr/local/bin/install-to-disk.sh"
 else
-    sudo /usr/local/bin/de
+    sudo /usr/local/bin/broyeur
 fi
 
 kill "$WM_PID" 2>/dev/null || true
 EOF
-chmod +x config/includes.chroot/usr/local/bin/de-session-live.sh
+chmod +x config/includes.chroot/usr/local/bin/broyeur-session-live.sh
 
 mkdir -p config/includes.chroot/usr/share/xsessions/
-cat << 'EOF' > config/includes.chroot/usr/share/xsessions/disk-eraser-live.desktop
+cat << 'EOF' > config/includes.chroot/usr/share/xsessions/e-Broyeur-live.desktop
 [Desktop Entry]
-Name=Disk Eraser - Live
+Name=e-Broyeur - Live
 Comment=Borne de blanchiment (mode live)
-Exec=/usr/local/bin/de-session-live.sh
+Exec=/usr/local/bin/broyeur-session-live.sh
 Type=Application
 EOF
 
@@ -271,24 +271,24 @@ EOF
 # ════════════════════════════════════════════════════════════════════════════════
 echo "=== Configuration XFCE kiosque (installer) ==="
 
-cat << 'EOF' > config/includes.chroot/usr/local/bin/de-session-installer.sh
+cat << 'EOF' > config/includes.chroot/usr/local/bin/broyeur-session-installer.sh
 #!/bin/bash
 xset s off -dpms 2>/dev/null || true
 xset s noblank   2>/dev/null || true
 xfwm4 --compositor=off &
 WM_PID=$!
 sleep 1
-sudo /usr/local/bin_installer/de-installer
+sudo /usr/local/bin_installer/broyeur-installer
 xterm -title "Session administrateur" -fa "Monospace" -fs 12 &
 kill "$WM_PID" 2>/dev/null || true
 EOF
-chmod +x config/includes.chroot/usr/local/bin/de-session-installer.sh
+chmod +x config/includes.chroot/usr/local/bin/broyeur-session-installer.sh
 
-cat << 'EOF' > config/includes.chroot/usr/share/xsessions/disk-eraser-installer.desktop
+cat << 'EOF' > config/includes.chroot/usr/share/xsessions/e-Broyeur-installer.desktop
 [Desktop Entry]
-Name=Disk Eraser - Borne installee
+Name=E-Broyeur - Borne installee
 Comment=Borne de blanchiment (mode installe, kiosque XFCE)
-Exec=/usr/local/bin/de-session-installer.sh
+Exec=/usr/local/bin/broyeur-session-installer.sh
 Type=Application
 EOF
 
@@ -297,21 +297,21 @@ mkdir -p config/includes.chroot/etc/lightdm/lightdm.conf.d/
 cat << 'EOF' > config/includes.chroot/etc/lightdm/lightdm.conf.d/50-autologin.conf
 [Seat:*]
 autologin-user=user
-autologin-session=disk-eraser-live
+autologin-session=e-Broyeur-live
 autologin-user-timeout=0
 EOF
 
 mkdir -p config/includes.chroot/etc/skel/
 cat << 'EOF' > config/includes.chroot/etc/skel/.dmrc
 [Desktop]
-Session=disk-eraser-live
+Session=e-Broyeur-live
 EOF
 
 cat << 'EOF' > config/includes.chroot/etc/skel/.bashrc
 if [ -f /etc/bashrc ]; then . /etc/bashrc; fi
-echo "Borne de blanchiment Disk Eraser (64-bit)"
-echo "  sudo de            -> mode live"
-echo "  sudo de-installer  -> mode installe (test)"
+echo "Borne de blanchiment E-Broyeur (64-bit)"
+echo "  sudo broyeur            -> mode live"
+echo "  sudo broyeur-installer  -> mode installe (test)"
 EOF
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -322,7 +322,7 @@ cat << 'INSTALLER' > config/includes.chroot/usr/local/bin/install-to-disk.sh
 #!/bin/bash
 set -e
 
-TITLE="Disk Eraser - Installation"
+TITLE="e-Broyeur - Installation"
 TARGET_MNT="/mnt/target"
 
 part() {
@@ -417,32 +417,32 @@ rm -f "$TARGET_MNT/etc/live/boot.conf" 2>/dev/null || true
 cat > "$TARGET_MNT/etc/lightdm/lightdm.conf.d/50-autologin.conf" << 'LIGHTDM_EOF'
 [Seat:*]
 autologin-user=user
-autologin-session=disk-eraser-installer
+autologin-session=e-Broyeur-installer
 autologin-user-timeout=0
 LIGHTDM_EOF
 
 cat > "$TARGET_MNT/etc/skel/.dmrc" << 'DMRC_EOF'
 [Desktop]
-Session=disk-eraser-installer
+Session=e-Broyeur-installer
 DMRC_EOF
 
 [ -f "$TARGET_MNT/home/user/.dmrc" ] && \
 cat > "$TARGET_MNT/home/user/.dmrc" << 'DMRC_EOF'
 [Desktop]
-Session=disk-eraser-installer
+Session=e-Broyeur-installer
 DMRC_EOF
 
-mkdir -p "$TARGET_MNT/var/log/disk_eraser/pdf/"
-mkdir -p "$TARGET_MNT/var/lib/disk_eraser/"
-mkdir -p "$TARGET_MNT/etc/disk_eraser/"
-chmod 750 "$TARGET_MNT/var/log/disk_eraser/" \
-          "$TARGET_MNT/var/lib/disk_eraser/" \
-          "$TARGET_MNT/etc/disk_eraser/"
+mkdir -p "$TARGET_MNT/var/log/e-Broyeur/pdf/"
+mkdir -p "$TARGET_MNT/var/lib/e-Broyeur/"
+mkdir -p "$TARGET_MNT/etc/e-Broyeur/"
+chmod 750 "$TARGET_MNT/var/log/e-Broyeur/" \
+          "$TARGET_MNT/var/lib/e-Broyeur/" \
+          "$TARGET_MNT/etc/e-Broyeur/"
 
 cat > "$TARGET_MNT/etc/default/grub" << 'GRUBCFG'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=3
-GRUB_DISTRIBUTOR="Disk Eraser - Borne de blanchiment"
+GRUB_DISTRIBUTOR="e-Broyeur - Borne de blanchiment"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
 GRUB_CMDLINE_LINUX=""
 GRUBCFG
@@ -459,7 +459,7 @@ if [ "$UEFI" -eq 1 ]; then
     chroot "$TARGET_MNT" grub-install \
         --target=x86_64-efi \
         --efi-directory=/boot/efi \
-        --bootloader-id=DiskEraser \
+        --bootloader-id=e-Broyeur \
         --recheck
 else
     chroot "$TARGET_MNT" grub-install --target=i386-pc --recheck "$TARGET"
@@ -476,7 +476,7 @@ umount "$TARGET_MNT"
 whiptail --title "$TITLE" --msgbox \
 "Installation terminee !
 
-Le systeme Disk Eraser a ete installe sur $TARGET
+Le systeme e-Broyeur a ete installe sur $TARGET
 en mode kiosque XFCE.
 
 Au demarrage :
@@ -531,7 +531,7 @@ DEFAULT live
 TIMEOUT 150
 PROMPT 0
 
-MENU TITLE Disk Eraser v7.0 (64-bit) - Menu de demarrage
+MENU TITLE e-Broyeur v7.0 (64-bit) - Menu de demarrage
 
 LABEL live
   MENU LABEL > Demarrer en mode Live (OpenBox kiosque)
@@ -634,7 +634,7 @@ DEFAULT live
 TIMEOUT 150
 PROMPT 0
 
-MENU TITLE Disk Eraser v7.0 (64-bit) - Menu de demarrage
+MENU TITLE e-Broyeur v7.0 (64-bit) - Menu de demarrage
 
 LABEL live
   MENU LABEL > Demarrer en mode Live (OpenBox kiosque)

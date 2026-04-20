@@ -199,7 +199,7 @@ cat << 'EOF' > config/includes.chroot/etc/xdg/openbox/rc.xml
 EOF
 
 # Script de session : live uniquement, pas de branche installer
-cat << 'EOF' > config/includes.chroot/usr/local/bin/de-session.sh
+cat << 'EOF' > config/includes.chroot/usr/local/bin/broyeur-session.sh
 #!/bin/bash
 xset s off -dpms 2>/dev/null || true
 xset s noblank   2>/dev/null || true

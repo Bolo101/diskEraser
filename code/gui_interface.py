@@ -1,32 +1,58 @@
 import os
-import time
 import sys
+import time
+import threading
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import filedialog, messagebox, ttk
 from subprocess import CalledProcessError, SubprocessError
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List
+
 from disk_erase import get_disk_serial, is_ssd
 from utils import get_disk_list, get_base_disk
 from disk_partition import partition_disk
 from disk_format import format_disk
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from log_handler import (log_info, log_error, log_erase_operation,
-                         session_start, session_end,
-                         generate_session_pdf, generate_log_file_pdf)
+from log_handler import (
+    log_info,
+    log_error,
+    log_erase_operation,
+    session_start,
+    session_end,
+    generate_session_pdf,
+    generate_log_file_pdf,
+)
 from disk_operations import get_active_disk, process_disk
-import threading
-from typing import Dict, List
 
 
 class DiskEraserGUI:
-
-    # Intervalle de rafraîchissement automatique de la liste des disques (ms)
     _REFRESH_INTERVAL_MS = 3000
+
+    _BG = '#0b1220'
+    _BG_ELEVATED = '#111b2e'
+    _SURFACE = '#14233c'
+    _SURFACE2 = '#1a2d4c'
+    _SURFACE3 = '#21375c'
+    _BORDER = '#27456f'
+    _BORDER_SOFT = '#1c3556'
+    _TEXT = '#edf4ff'
+    _TEXT_DIM = '#9bb4d1'
+    _TEXT_FAINT = '#6f87a4'
+    _ACCENT = '#0b84ff'
+    _ACCENT2 = '#39a0ff'
+    _ACCENT_SOFT = '#123252'
+    _DANGER = '#ef5350'
+    _WARNING = '#f5b342'
+    _SUCCESS = '#21c17a'
+    _SSD_COLOR = '#4dd7ff'
+    _HDD_COLOR = '#f0bf5a'
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Secure Disk Eraser")
-        self.root.geometry("600x500")
+        self.root.geometry("1280x820")
+        self.root.minsize(1120, 720)
         self.root.attributes("-fullscreen", True)
+        self.root.configure(bg=self._BG)
 
         self.disk_vars: Dict[str, tk.BooleanVar] = {}
         self.filesystem_var = tk.StringVar(value="ext4")
@@ -38,153 +64,422 @@ class DiskEraserGUI:
         self.active_disk = get_active_disk()
 
         self.active_drive_logged = False
-
-        # Ensemble des disques actuellement en cours d'effacement
         self._erasing_devs: set = set()
-
-        # Cache de la dernière liste de disques connue, utilisé pour le diff
-        # {dev: {"label_text": str, "text_color": str}}
         self._disk_row_cache: Dict[str, dict] = {}
-
-        # Widgets par disque : {dev: {"frame": Frame, "cb": Checkbutton, "var": BooleanVar}}
         self._disk_rows: Dict[str, dict] = {}
+        self._progress_phase_var = tk.StringVar(value="En attente")
+        self._progress_detail_var = tk.StringVar(value="Aucune opération en cours")
+        self._progress_stats_var = tk.StringVar(value="0 disque sélectionné")
+        self._pending_unmount_dir = None
 
         session_start()
 
         if os.geteuid() != 0:
-            messagebox.showerror("Error", "This program must be run as root!")
+            messagebox.showerror("Erreur", "Ce programme doit être exécuté en tant que root.")
             root.destroy()
             sys.exit(1)
 
         self.create_widgets()
         self.refresh_disks()
-        # Lance la boucle de rafraîchissement automatique
         self.root.after(self._REFRESH_INTERVAL_MS, self._auto_refresh_disks)
 
-    # ── Construction UI ────────────────────────────────────────────────────────
-    def create_widgets(self) -> None:
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        title_label = ttk.Label(main_frame, text="Secure Disk Eraser", font=("Arial", 16, "bold"))
-        title_label.pack(pady=10)
-
-        # Left frame - Disk selection
-        disk_frame = ttk.LabelFrame(main_frame, text="Select Disks to Erase")
-        disk_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        self.disk_canvas = tk.Canvas(disk_frame)
-        scrollbar = ttk.Scrollbar(disk_frame, orient="vertical", command=self.disk_canvas.yview)
-        self.scrollable_disk_frame = ttk.Frame(self.disk_canvas)
-
-        self.scrollable_disk_frame.bind(
-            "<Configure>",
-            lambda e: self.disk_canvas.configure(scrollregion=self.disk_canvas.bbox("all"))
+    def _setup_theme(self) -> None:
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('.', background=self._BG, foreground=self._TEXT, font=('Segoe UI', 10))
+        style.configure(
+            'TScrollbar',
+            background=self._SURFACE2,
+            troughcolor=self._BG_ELEVATED,
+            arrowcolor=self._TEXT_DIM,
+            bordercolor=self._BORDER_SOFT,
+            darkcolor=self._SURFACE2,
+            lightcolor=self._SURFACE2,
+            relief='flat',
         )
-        self.disk_canvas.create_window((0, 0), window=self.scrollable_disk_frame, anchor="nw")
-        self.disk_canvas.configure(yscrollcommand=scrollbar.set)
+        style.map('TScrollbar', background=[('active', self._SURFACE3)])
+        style.configure(
+            'TEntry',
+            fieldbackground=self._BG_ELEVATED,
+            foreground=self._TEXT,
+            insertcolor=self._TEXT,
+            bordercolor=self._BORDER,
+            selectbackground=self._ACCENT,
+            selectforeground='white',
+            relief='flat',
+            padding=6,
+        )
+
+    def _set_status(self, text: str, tone: str = 'idle') -> None:
+        color = {
+            'idle': self._SUCCESS,
+            'busy': self._WARNING,
+            'danger': self._DANGER,
+            'info': self._ACCENT2,
+        }.get(tone, self._SUCCESS)
+        self.status_var.set(text)
+        if hasattr(self, '_status_dot'):
+            self._status_dot.configure(fg=color)
+
+    def _make_card(self, parent: tk.Widget, pady=(0, 0), fill=tk.BOTH, expand=False) -> tk.Frame:
+        outer = tk.Frame(parent, bg=self._BORDER_SOFT, bd=0, highlightthickness=0)
+        outer.pack(fill=fill, expand=expand, pady=pady)
+        inner = tk.Frame(outer, bg=self._SURFACE, padx=1, pady=1)
+        inner.pack(fill=tk.BOTH, expand=True)
+        content = tk.Frame(inner, bg=self._SURFACE)
+        content.pack(fill=tk.BOTH, expand=True)
+        return content
+
+    def _section_label(self, parent: tk.Widget, text: str, subtitle: str = "") -> None:
+        row = tk.Frame(parent, bg=parent.cget('bg'))
+        row.pack(fill=tk.X, pady=(2, 8))
+        tk.Frame(row, bg=self._ACCENT2, width=4, height=22).pack(side=tk.LEFT, fill=tk.Y, pady=(1, 1))
+        txt = tk.Frame(row, bg=parent.cget('bg'))
+        txt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 0))
+        tk.Label(txt, text=text, bg=parent.cget('bg'), fg=self._TEXT,
+                 font=('Segoe UI', 10, 'bold')).pack(anchor='w')
+        if subtitle:
+            tk.Label(txt, text=subtitle, bg=parent.cget('bg'), fg=self._TEXT_FAINT,
+                     font=('Segoe UI', 8)).pack(anchor='w', pady=(1, 0))
+
+    def _divider(self, parent: tk.Widget, pady=12) -> None:
+        tk.Frame(parent, bg=self._BORDER_SOFT, height=1).pack(fill=tk.X, pady=pady)
+
+    def _action_button(self, parent: tk.Widget, text: str, command,
+                       bg: str = None, hover_bg: str = None,
+                       fg: str = '#ffffff', accent=False) -> tk.Button:
+        bg = bg or self._SURFACE2
+        hover_bg = hover_bg or self._SURFACE3
+        btn = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=fg,
+            activebackground=hover_bg,
+            activeforeground=fg,
+            font=('Segoe UI', 10, 'bold' if accent else 'normal'),
+            bd=0,
+            padx=14,
+            pady=10,
+            cursor='hand2',
+            relief=tk.FLAT,
+            highlightthickness=0,
+        )
+        btn.bind('<Enter>', lambda e: btn.configure(bg=hover_bg))
+        btn.bind('<Leave>', lambda e: btn.configure(bg=bg))
+        return btn
+
+    def _map_disk_color(self, legacy_color: str, is_erasing: bool = False) -> str:
+        if is_erasing:
+            return self._WARNING
+        if legacy_color == 'red':
+            return self._DANGER
+        if legacy_color == 'blue':
+            return self._SSD_COLOR
+        return self._HDD_COLOR
+
+    def create_widgets(self) -> None:
+        self._setup_theme()
+
+        shell = tk.Frame(self.root, bg=self._BG)
+        shell.pack(fill=tk.BOTH, expand=True, padx=18, pady=18)
+
+        header = tk.Frame(shell, bg=self._SURFACE)
+        header.pack(fill=tk.X, pady=(0, 14))
+        tk.Frame(header, bg=self._ACCENT2, height=3).pack(fill=tk.X, side=tk.TOP)
+
+        header_body = tk.Frame(header, bg=self._SURFACE, padx=18, pady=16)
+        header_body.pack(fill=tk.X)
+
+        left_head = tk.Frame(header_body, bg=self._SURFACE)
+        left_head.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        top_line = tk.Frame(left_head, bg=self._SURFACE)
+        top_line.pack(anchor='w')
+        tk.Label(top_line, text='e-Broyeur', bg=self._SURFACE, fg=self._TEXT,
+                 font=('Segoe UI', 18, 'bold')).pack(side=tk.LEFT)
+        tk.Label(top_line, text='  v7.0', bg=self._SURFACE, fg=self._ACCENT2,
+                 font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, pady=(5, 0))
+        tk.Label(
+            left_head,
+            text='Effacement sécurisé pour supports mécaniques et électroniques, formatage et export de journaux.',
+            bg=self._SURFACE,
+            fg=self._TEXT_DIM,
+            font=('Segoe UI', 9),
+        ).pack(anchor='w', pady=(4, 0))
+
+        right_head = tk.Frame(header_body, bg=self._SURFACE)
+        right_head.pack(side=tk.RIGHT)
+        status_area = tk.Frame(right_head, bg=self._BG_ELEVATED, padx=12, pady=9)
+        status_area.pack(side=tk.RIGHT)
+        self._status_dot = tk.Label(status_area, text='●', bg=self._BG_ELEVATED,
+                                    fg=self._SUCCESS, font=('Segoe UI', 12, 'bold'))
+        self._status_dot.pack(side=tk.LEFT)
+        self.status_var = tk.StringVar(value='Prêt')
+        tk.Label(status_area, textvariable=self.status_var, bg=self._BG_ELEVATED,
+                 fg=self._TEXT, font=('Segoe UI', 10, 'bold'), padx=6).pack(side=tk.LEFT)
+
+        body = tk.Frame(shell, bg=self._BG)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        left_col = tk.Frame(body, bg=self._BG)
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+
+        right_col = tk.Frame(body, bg=self._BG, width=360)
+        right_col.pack(side=tk.RIGHT, fill=tk.BOTH)
+        right_col.pack_propagate(False)
+
+        disk_card = self._make_card(left_col, pady=(0, 10), expand=True)
+        disk_inner = tk.Frame(disk_card, bg=self._SURFACE, padx=16, pady=14)
+        disk_inner.pack(fill=tk.BOTH, expand=True)
+        self._section_label(disk_inner, 'Disques détectés')
+
+        disk_card_header = tk.Frame(disk_inner, bg=self._SURFACE)
+        disk_card_header.pack(fill=tk.X, pady=(0, 10))
+        self._disk_count_var = tk.StringVar(value='0 disque')
+        tk.Label(disk_card_header, textvariable=self._disk_count_var,
+                 bg=self._SURFACE, fg=self._TEXT_DIM, font=('Segoe UI', 9)).pack(side=tk.RIGHT)
+
+        list_holder = tk.Frame(disk_inner, bg=self._BG_ELEVATED)
+        list_holder.pack(fill=tk.BOTH, expand=True)
+
+        self.disk_canvas = tk.Canvas(list_holder, bg=self._BG_ELEVATED, highlightthickness=0, bd=0)
+        disk_sb = ttk.Scrollbar(list_holder, orient='vertical', command=self.disk_canvas.yview)
+        self.scrollable_disk_frame = tk.Frame(self.disk_canvas, bg=self._BG_ELEVATED)
+        self.scrollable_disk_frame.bind(
+            '<Configure>',
+            lambda e: self.disk_canvas.configure(scrollregion=self.disk_canvas.bbox('all')),
+        )
+        self.disk_canvas.create_window((0, 0), window=self.scrollable_disk_frame, anchor='nw')
+        self.disk_canvas.configure(yscrollcommand=disk_sb.set)
         self.disk_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        disk_sb.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.disclaimer_var = tk.StringVar(value="")
-        self.disclaimer_label = ttk.Label(disk_frame, textvariable=self.disclaimer_var,
-                                          foreground="red", wraplength=250)
-        self.disclaimer_label.pack(side=tk.BOTTOM, pady=5)
+        footer_legend = tk.Frame(disk_inner, bg=self._SURFACE)
+        footer_legend.pack(fill=tk.X, pady=(10, 0))
+        for symbol, color, text in [
+            ('◉', self._HDD_COLOR, 'Mécanique'),
+            ('◈', self._SSD_COLOR, 'Électronique'),
+            ('⚠', self._DANGER, 'Système actif'),
+            ('⚙', self._WARNING, 'En cours'),
+        ]:
+            grp = tk.Frame(footer_legend, bg=self._SURFACE)
+            grp.pack(side=tk.LEFT, padx=(0, 14))
+            tk.Label(grp, text=symbol, bg=self._SURFACE, fg=color,
+                     font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT)
+            tk.Label(grp, text=f' {text}', bg=self._SURFACE, fg=self._TEXT_FAINT,
+                     font=('Segoe UI', 8)).pack(side=tk.LEFT)
 
-        self.ssd_disclaimer_var = tk.StringVar(value="")
-        self.ssd_disclaimer_label = ttk.Label(disk_frame, textvariable=self.ssd_disclaimer_var,
-                                              foreground="blue", wraplength=250)
-        self.ssd_disclaimer_label.pack(side=tk.BOTTOM, pady=5)
+        self.ssd_disclaimer_var = tk.StringVar(value='')
+        self.ssd_disclaimer_label = tk.Label(
+            left_col,
+            textvariable=self.ssd_disclaimer_var,
+            bg=self._BG,
+            fg=self._SSD_COLOR,
+            wraplength=720,
+            font=('Segoe UI', 9),
+            justify=tk.LEFT,
+        )
+        self.ssd_disclaimer_label.pack(anchor='w', pady=(2, 0))
 
-        # NOTE : le bouton "Refresh Disks" a été supprimé.
-        # Le rafraîchissement est désormais automatique (cf. _auto_refresh_disks).
+        self.disclaimer_var = tk.StringVar(value='')
+        self.disclaimer_label = tk.Label(
+            left_col,
+            textvariable=self.disclaimer_var,
+            bg=self._BG,
+            fg=self._DANGER,
+            wraplength=720,
+            font=('Segoe UI', 9),
+            justify=tk.LEFT,
+        )
+        self.disclaimer_label.pack(anchor='w', pady=(2, 0))
 
-        # Right frame - Options
-        options_frame = ttk.LabelFrame(main_frame, text="Options")
-        options_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=5, pady=5)
+        log_card = self._make_card(left_col, pady=(0, 10), expand=True)
+        log_inner = tk.Frame(log_card, bg=self._SURFACE, padx=12, pady=12)
+        log_inner.pack(fill=tk.BOTH, expand=True)
 
-        method_label = ttk.Label(options_frame, text="Erasure Method:")
-        method_label.pack(anchor="w", pady=(10, 5))
+        log_meta = tk.Frame(log_inner, bg=self._SURFACE)
+        log_meta.pack(fill=tk.X, pady=(0, 6))
+        tk.Label(log_meta, textvariable=self._progress_phase_var, bg=self._SURFACE,
+                 fg=self._TEXT_DIM, font=('Segoe UI', 9)).pack(side=tk.LEFT)
+        tk.Label(log_meta, textvariable=self._progress_stats_var, bg=self._SURFACE,
+                 fg=self._TEXT_FAINT, font=('Segoe UI', 8)).pack(side=tk.RIGHT)
 
-        for text, value in [("Standard Overwrite", "overwrite"),
-                             ("Cryptographic Erasure", "crypto")]:
-            ttk.Radiobutton(options_frame, text=text, value=value,
-                            variable=self.erase_method_var,
-                            command=self.update_method_options).pack(anchor="w", padx=20)
+        tk.Label(log_inner, textvariable=self._progress_detail_var, bg=self._SURFACE,
+                 fg=self._TEXT, font=('Segoe UI', 9)).pack(anchor='w', pady=(0, 6))
 
-        self.passes_frame = ttk.Frame(options_frame)
-        self.passes_frame.pack(fill=tk.X, pady=10, padx=5)
-        ttk.Label(self.passes_frame, text="Number of passes:").pack(side=tk.LEFT, padx=5)
-        ttk.Entry(self.passes_frame, textvariable=self.passes_var, width=5).pack(side=tk.LEFT, padx=5)
+        log_holder = tk.Frame(log_inner, bg=self._BG_ELEVATED)
+        log_holder.pack(fill=tk.BOTH, expand=True)
+        self.log_text = tk.Text(
+            log_holder,
+            height=16,
+            wrap=tk.WORD,
+            bg=self._BG_ELEVATED,
+            fg=self._TEXT,
+            insertbackground=self._TEXT,
+            font=('Consolas', 9),
+            bd=0,
+            highlightthickness=0,
+            selectbackground=self._ACCENT_SOFT,
+            padx=12,
+            pady=10,
+        )
+        log_sb = ttk.Scrollbar(log_holder, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_sb.set)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        log_sb.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.crypto_fill_frame = ttk.LabelFrame(options_frame, text="Fill Method (Crypto)")
-        for text, value in [("Random Data", "random"), ("Zero Data", "zero")]:
-            ttk.Radiobutton(self.crypto_fill_frame, text=text, value=value,
-                            variable=self.crypto_fill_var).pack(anchor="w", padx=20, pady=2)
+        opt_card = self._make_card(right_col, expand=True)
+        inner = tk.Frame(opt_card, bg=self._SURFACE, padx=16, pady=14)
+        inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(options_frame, text="Choose Filesystem:").pack(anchor="w", pady=(10, 5))
-        for text, value in [("ext4", "ext4"), ("NTFS", "ntfs"), ("FAT32", "vfat")]:
-            ttk.Radiobutton(options_frame, text=text, value=value,
-                            variable=self.filesystem_var).pack(anchor="w", padx=20)
+        self._section_label(inner, "Méthode d’effacement")
+        for txt, val in [("Écrasement standard", "overwrite"),
+                         ("Effacement cryptographique", "crypto")]:
+            tk.Radiobutton(
+                inner,
+                text=txt,
+                value=val,
+                variable=self.erase_method_var,
+                command=self.update_method_options,
+                bg=self._SURFACE,
+                fg=self._TEXT,
+                selectcolor=self._BG_ELEVATED,
+                activebackground=self._SURFACE,
+                activeforeground=self._ACCENT2,
+                font=('Segoe UI', 10),
+                bd=0,
+                highlightthickness=0,
+            ).pack(anchor='w', padx=4, pady=2)
 
-        ttk.Button(options_frame, text="Exit Fullscreen",
-                   command=self.toggle_fullscreen).pack(pady=5, padx=10, fill=tk.X)
-        ttk.Button(options_frame, text="Start Erasure",
-                   command=self.start_erasure).pack(pady=10, padx=10, fill=tk.X)
-        ttk.Button(options_frame, text="Format Only (No Erase)",
-                   command=self.format_only).pack(pady=5, padx=10, fill=tk.X)
+        self.passes_frame = tk.Frame(inner, bg=self._SURFACE)
+        self.passes_frame.pack(fill=tk.X, pady=(8, 0))
+        tk.Label(self.passes_frame, text='Nombre de passes :', bg=self._SURFACE,
+                 fg=self._TEXT_DIM, font=('Segoe UI', 10)).pack(side=tk.LEFT)
+        ttk.Entry(self.passes_frame, textvariable=self.passes_var, width=6).pack(side=tk.LEFT, padx=(8, 0))
 
-        log_buttons_frame = ttk.Frame(options_frame)
-        log_buttons_frame.pack(pady=5, padx=10, fill=tk.X)
-        ttk.Button(log_buttons_frame, text="Print Session Log",
-                   command=self.print_session_log).pack(side=tk.TOP, pady=5, padx=10,
-                                                        fill=tk.X, expand=True)
-        ttk.Button(log_buttons_frame, text="Print Complete Log",
-                   command=self.print_complete_log).pack(side=tk.BOTTOM, pady=5, padx=10,
-                                                         fill=tk.X, expand=True)
+        self._divider(inner)
 
-        ttk.Button(options_frame, text="Power Off System",
-                   command=self.power_off_system).pack(pady=5, padx=10, fill=tk.X)
-        ttk.Button(options_frame, text="Exit",
-                   command=self.exit_application).pack(pady=5, padx=10, fill=tk.X)
+        self._section_label(inner, 'Remplissage (mode cryptographique)')
+        self.crypto_fill_frame = tk.Frame(inner, bg=self._SURFACE)
+        self.crypto_fill_frame.pack(fill=tk.X)
+        for txt, val in [("Données aléatoires", "random"), ("Zéros", "zero")]:
+            tk.Radiobutton(
+                self.crypto_fill_frame,
+                text=txt,
+                value=val,
+                variable=self.crypto_fill_var,
+                bg=self._SURFACE,
+                fg=self._TEXT,
+                selectcolor=self._BG_ELEVATED,
+                activebackground=self._SURFACE,
+                activeforeground=self._ACCENT2,
+                font=('Segoe UI', 10),
+                bd=0,
+                highlightthickness=0,
+            ).pack(anchor='w', padx=4, pady=1)
 
-        progress_frame = ttk.LabelFrame(main_frame, text="Progress")
-        progress_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
-        self.progress_var = tk.DoubleVar()
-        self.progress = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
-        self.progress.pack(fill=tk.X, padx=10, pady=10)
-        self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(progress_frame, textvariable=self.status_var).pack(pady=5)
+        self._divider(inner)
 
-        log_frame = ttk.LabelFrame(main_frame, text="Log")
-        log_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.log_text = tk.Text(log_frame, height=6, wrap=tk.WORD)
-        log_scrollbar = ttk.Scrollbar(log_frame, command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=log_scrollbar.set)
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        log_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._section_label(inner, 'Système de fichiers')
+        fs_row = tk.Frame(inner, bg=self._SURFACE)
+        fs_row.pack(fill=tk.X)
+        for txt, val in [("ext4", "ext4"), ("NTFS", "ntfs"), ("FAT32", "vfat")]:
+            tk.Radiobutton(
+                fs_row,
+                text=txt,
+                value=val,
+                variable=self.filesystem_var,
+                bg=self._SURFACE,
+                fg=self._TEXT,
+                selectcolor=self._BG_ELEVATED,
+                activebackground=self._SURFACE,
+                activeforeground=self._ACCENT2,
+                font=('Segoe UI', 10),
+                bd=0,
+                highlightthickness=0,
+            ).pack(side=tk.LEFT, padx=(0, 10))
 
-        self.root.protocol("WM_DELETE_WINDOW", self.exit_application)
+        self._divider(inner)
+
+        self._action_button(
+            inner,
+            "▶  DÉMARRER L’EFFACEMENT",
+            self.start_erasure,
+            bg='#b3342b',
+            hover_bg=self._DANGER,
+            accent=True,
+        ).pack(fill=tk.X, pady=(0, 6))
+        self._action_button(
+            inner,
+            '◻  FORMATER SEULEMENT',
+            self.format_only,
+            bg=self._ACCENT,
+            hover_bg=self._ACCENT2,
+            accent=True,
+        ).pack(fill=tk.X, pady=(0, 8))
+
+        export_row = tk.Frame(inner, bg=self._SURFACE)
+        export_row.pack(fill=tk.X, pady=(0, 6))
+        self._action_button(
+            export_row,
+            '↓ PDF de session',
+            self.print_session_log,
+            bg=self._SURFACE2,
+            hover_bg=self._SURFACE3,
+            fg=self._TEXT,
+        ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 4))
+        self._action_button(
+            export_row,
+            '↓ PDF complet',
+            self.print_complete_log,
+            bg=self._SURFACE2,
+            hover_bg=self._SURFACE3,
+            fg=self._TEXT,
+        ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(4, 0))
+
+        self._divider(inner)
+
+        system_row = tk.Frame(inner, bg=self._SURFACE)
+        system_row.pack(fill=tk.X, pady=(0, 6))
+        self._action_button(
+            system_row,
+            '⛶  Plein écran',
+            self.toggle_fullscreen,
+            bg=self._SURFACE2,
+            hover_bg=self._SURFACE3,
+            fg=self._TEXT,
+        ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 4))
+        self._action_button(
+            system_row,
+            '⏻  Éteindre',
+            self.power_off_system,
+            bg='#341418',
+            hover_bg='#512126',
+            fg='#ff8f8c',
+        ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(4, 0))
+
+        self._action_button(
+            inner,
+            '✕  QUITTER',
+            self.exit_application,
+            bg=self._SURFACE2,
+            hover_bg=self._SURFACE3,
+            fg=self._TEXT_DIM,
+        ).pack(fill=tk.X, pady=(0, 2))
+
+        self.root.protocol('WM_DELETE_WINDOW', self.exit_application)
         self.update_method_options()
+        self._set_status('Prêt', 'idle')
 
-    # ── Rafraîchissement automatique des disques ───────────────────────────────
     def _auto_refresh_disks(self) -> None:
-        """
-        Boucle de rafraîchissement périodique lancée au démarrage.
-        Ne rafraîchit pas si un effacement est actif afin d'éviter
-        de modifier la liste pendant le traitement.
-        """
         if not self._erasing_devs:
             self.refresh_disks()
         self.root.after(self._REFRESH_INTERVAL_MS, self._auto_refresh_disks)
 
-    # ── Helpers : construction d'une ligne de disque ──────────────────────────
     @staticmethod
     def _build_disk_label(disk: dict, active_physical_drives: set) -> tuple:
-        """
-        Calcule le texte et la couleur d'affichage pour un disque.
-        Retourne (id_text, details_text, text_color, is_active).
-        """
         device_name = disk['device'].replace('/dev/', '')
 
         try:
@@ -193,137 +488,181 @@ class DiskEraserGUI:
             disk_identifier = device_name
 
         try:
-            ssd_indicator = " (Solid_state)" if is_ssd(device_name) else " (Mechanical)"
+            ssd_indicator = ' (SSD)' if is_ssd(device_name) else ' (HDD)'
         except Exception:
-            ssd_indicator = " (Type unknown)"
+            ssd_indicator = ' (Type inconnu)'
 
         try:
             is_active = get_base_disk(device_name) in active_physical_drives
         except Exception:
             is_active = False
 
-        active_indicator = " (ACTIVE SYSTEM DISK)" if is_active else ""
-        disk_label_str   = disk.get('label', 'Unknown')
-        label_indicator  = (f" [Label: {disk_label_str}]"
-                            if disk_label_str and disk_label_str != "No Label"
-                            else " [No Label]")
+        active_indicator = ' (DISQUE SYSTÈME ACTIF)' if is_active else ''
+        disk_label_str = disk.get('label', 'Inconnu')
+        label_indicator = (
+            f" [Libellé : {disk_label_str}]"
+            if disk_label_str and disk_label_str != 'No Label'
+            else ' [Sans libellé]'
+        )
 
-        id_text      = f"{disk_identifier}{ssd_indicator}{active_indicator}{label_indicator}"
-        details_text = f"Size: {disk['size']} - Model: {disk['model']}"
-        text_color   = "red" if is_active else ("blue" if "(Solid_state)" in ssd_indicator else "black")
-
+        id_text = f"{disk_identifier}{ssd_indicator}{active_indicator}{label_indicator}"
+        details_text = f"Taille : {disk['size']}  •  Modèle : {disk['model']}"
+        text_color = 'red' if is_active else ('blue' if '(SSD)' in ssd_indicator else 'black')
         return id_text, details_text, text_color, is_active
 
     def _create_disk_row(self, disk: dict, active_physical_drives: set) -> None:
-        """Crée et pack les widgets pour un disque donné. Ne doit être appelé qu'une fois par disque."""
         dev = disk['device']
         id_text, details_text, text_color, _ = self._build_disk_label(disk, active_physical_drives)
         is_erasing = dev in self._erasing_devs
+        display_color = self._map_disk_color(text_color, is_erasing)
+        is_ssd_disk = '(SSD)' in id_text
+        is_active_disk = text_color == 'red'
 
         var = tk.BooleanVar(value=is_erasing)
         self.disk_vars[dev] = var
 
-        disk_entry_frame = ttk.Frame(self.scrollable_disk_frame)
-        disk_entry_frame.pack(fill=tk.X, pady=5, padx=2)
+        card_bg = self._SURFACE if not is_erasing else self._SURFACE2
+        outer = tk.Frame(self.scrollable_disk_frame, bg=self._BORDER_SOFT, padx=1, pady=1)
+        outer.pack(fill=tk.X, padx=8, pady=5)
 
-        checkbox_row = ttk.Frame(disk_entry_frame)
-        checkbox_row.pack(fill=tk.X)
+        disk_entry_frame = tk.Frame(outer, bg=card_bg, padx=12, pady=10)
+        disk_entry_frame.pack(fill=tk.BOTH, expand=True)
 
-        cb = ttk.Checkbutton(checkbox_row, variable=var)
+        top = tk.Frame(disk_entry_frame, bg=card_bg)
+        top.pack(fill=tk.X)
+
+        marker_color = self._DANGER if is_active_disk else self._WARNING if is_erasing else self._SSD_COLOR if is_ssd_disk else self._HDD_COLOR
+        tk.Frame(top, bg=marker_color, width=4, height=34).pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+
+        cb = tk.Checkbutton(
+            top,
+            variable=var,
+            bg=card_bg,
+            fg=display_color,
+            activebackground=card_bg,
+            selectcolor=self._BG_ELEVATED,
+            bd=0,
+            highlightthickness=0,
+        )
         if is_erasing:
-            cb.configure(state="disabled")
-        cb.pack(side=tk.LEFT)
+            cb.configure(state='disabled')
+        cb.pack(side=tk.LEFT, pady=(1, 0))
 
-        id_label = ttk.Label(checkbox_row, text=id_text, foreground=text_color, wraplength=300)
-        id_label.pack(side=tk.LEFT, padx=5, fill=tk.X)
+        text_col = tk.Frame(top, bg=card_bg)
+        text_col.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 8))
 
-        details_row = ttk.Frame(disk_entry_frame)
-        details_row.pack(fill=tk.X, padx=25)
-        details_label = ttk.Label(details_row, text=details_text,
-                                  foreground=text_color, wraplength=300)
-        details_label.pack(side=tk.LEFT, fill=tk.X)
+        id_label = tk.Label(text_col, text=id_text, fg=self._TEXT, bg=card_bg,
+                            wraplength=520, justify=tk.LEFT,
+                            font=('Segoe UI', 10, 'bold'))
+        id_label.pack(anchor='w')
 
-        sep = ttk.Separator(self.scrollable_disk_frame, orient=tk.HORIZONTAL)
-        sep.pack(fill=tk.X, pady=2)
+        details_label = tk.Label(text_col, text=details_text, fg=self._TEXT_DIM, bg=card_bg,
+                                 wraplength=520, justify=tk.LEFT,
+                                 font=('Segoe UI', 9))
+        details_label.pack(anchor='w', pady=(4, 0))
 
-        # Mémorise tous les widgets de cette ligne pour les mises à jour futures
+        if is_erasing:
+            badge_text, badge_bg, badge_fg = '⚙ EN COURS', self._WARNING, '#1a1a1a'
+        elif is_active_disk:
+            badge_text, badge_bg, badge_fg = '⚠ SYSTÈME', self._DANGER, '#ffffff'
+        elif is_ssd_disk:
+            badge_text, badge_bg, badge_fg = '◈ SSD', self._SSD_COLOR, '#08131d'
+        else:
+            badge_text, badge_bg, badge_fg = '◉ HDD', self._HDD_COLOR, '#08131d'
+
+        badge = tk.Label(top, text=badge_text, bg=badge_bg, fg=badge_fg,
+                         font=('Segoe UI', 8, 'bold'), padx=8, pady=4)
+        badge.pack(side=tk.RIGHT, anchor='n')
+
+        sep = tk.Frame(self.scrollable_disk_frame, bg=self._BG_ELEVATED, height=1)
+        sep.pack(fill=tk.X, padx=8)
+
         self._disk_rows[dev] = {
-            "frame":         disk_entry_frame,
-            "sep":           sep,
-            "cb":            cb,
-            "var":           var,
-            "id_label":      id_label,
-            "details_label": details_label,
+            'frame': disk_entry_frame,
+            'outer': outer,
+            'sep': sep,
+            'cb': cb,
+            'var': var,
+            'id_label': id_label,
+            'details_label': details_label,
+            'badge': badge,
+            'top': top,
         }
-        self._disk_row_cache[dev] = {"id_text": id_text, "details_text": details_text,
-                                     "text_color": text_color}
+        self._disk_row_cache[dev] = {
+            'id_text': id_text,
+            'details_text': details_text,
+            'text_color': text_color,
+        }
 
     def _update_disk_row(self, dev: str, disk: dict, active_physical_drives: set) -> None:
-        """
-        Met à jour uniquement les attributs qui ont changé pour un disque existant.
-        Aucune destruction/recréation de widget → pas de clignotement.
-        """
         id_text, details_text, text_color, _ = self._build_disk_label(disk, active_physical_drives)
         is_erasing = dev in self._erasing_devs
+        display_color = self._map_disk_color(text_color, is_erasing)
+        is_ssd_disk = '(SSD)' in id_text
+        is_active_disk = text_color == 'red'
         row = self._disk_rows[dev]
-
-        # Mise à jour du texte et de la couleur si changement
         cache = self._disk_row_cache.get(dev, {})
-        if cache.get("id_text") != id_text:
-            row["id_label"].configure(text=id_text, foreground=text_color)
-        if cache.get("details_text") != details_text:
-            row["details_label"].configure(text=details_text, foreground=text_color)
-        if cache.get("text_color") != text_color:
-            row["id_label"].configure(foreground=text_color)
-            row["details_label"].configure(foreground=text_color)
 
-        # Mise à jour état checkbox
-        var = row["var"]
-        cb  = row["cb"]
+        card_bg = self._SURFACE if not is_erasing else self._SURFACE2
+        row['frame'].configure(bg=card_bg)
+        row['top'].configure(bg=card_bg)
+        row['id_label'].configure(bg=card_bg)
+        row['details_label'].configure(bg=card_bg)
+        row['cb'].configure(bg=card_bg, activebackground=card_bg, fg=display_color)
+
+        if cache.get('id_text') != id_text or cache.get('text_color') != text_color:
+            row['id_label'].configure(text=id_text)
+        if cache.get('details_text') != details_text:
+            row['details_label'].configure(text=details_text)
+
+        var = row['var']
+        cb = row['cb']
         if is_erasing:
             var.set(True)
-            cb.configure(state="disabled")
+            cb.configure(state='disabled')
         else:
-            # Si le disque n'est plus en cours d'effacement on remet normal
-            # mais on ne touche pas à la sélection de l'utilisateur
-            cb.configure(state="normal")
+            cb.configure(state='normal')
 
-        self._disk_row_cache[dev] = {"id_text": id_text, "details_text": details_text,
-                                     "text_color": text_color}
+        if is_active_disk:
+            row['badge'].configure(text='⚠ SYSTÈME', bg=self._DANGER, fg='#ffffff')
+        elif is_erasing:
+            row['badge'].configure(text='⚙ EN COURS', bg=self._WARNING, fg='#1a1a1a')
+        elif is_ssd_disk:
+            row['badge'].configure(text='◈ SSD', bg=self._SSD_COLOR, fg='#08131d')
+        else:
+            row['badge'].configure(text='◉ HDD', bg=self._HDD_COLOR, fg='#08131d')
+
+        self._disk_row_cache[dev] = {
+            'id_text': id_text,
+            'details_text': details_text,
+            'text_color': text_color,
+        }
         self.disk_vars[dev] = var
 
     def _remove_disk_row(self, dev: str) -> None:
-        """Détruit les widgets d'un disque qui a disparu."""
         row = self._disk_rows.pop(dev, None)
         if row:
-            row["sep"].destroy()
-            row["frame"].destroy()
+            row['sep'].destroy()
+            try:
+                row['outer'].destroy()
+            except Exception:
+                pass
         self._disk_row_cache.pop(dev, None)
         self.disk_vars.pop(dev, None)
 
-    # ── Rafraîchissement principal (diff, sans clignotement) ───────────────────
     def refresh_disks(self) -> None:
-        """
-        Met à jour la liste des disques de façon incrémentale :
-          - Crée uniquement les lignes des disques nouvellement détectés.
-          - Supprime uniquement les lignes des disques disparus.
-          - Met à jour en place les lignes des disques déjà affichés.
-        Cette approche évite tout clignotement visuel.
-        """
-        # ── 1. Récupération de la liste système ──
         try:
             new_disks = get_disk_list()
         except (CalledProcessError, SubprocessError, FileNotFoundError, IOError, OSError) as e:
-            error_msg = f"Error getting disk list: {str(e)}"
+            error_msg = f"Erreur lors de la récupération des disques : {str(e)}"
             self.update_gui_log(error_msg)
             log_error(error_msg)
             new_disks = []
 
-        # ── 2. Détection du disque actif ──
         try:
             active_base_disks = get_active_disk()
         except Exception as e:
-            self.update_gui_log(f"Error detecting active disk: {str(e)}")
+            self.update_gui_log(f"Erreur lors de la détection du disque actif : {str(e)}")
             active_base_disks = None
         active_physical_drives = set(active_base_disks) if active_base_disks else set()
 
@@ -331,46 +670,39 @@ class DiskEraserGUI:
             log_info(f"Active physical devices: {active_physical_drives}")
             self.active_drive_logged = True
 
-        # Mise à jour des disclaimers (StringVar → pas de clignotement)
         if active_physical_drives:
             self.disclaimer_var.set(
-                "WARNING: Disk marked in red contains the active filesystem. "
-                "Erasing this disk will cause system failure and data loss!"
+                "⚠ Le disque en rouge contient le système actif. L’effacer provoquera une panne système et une perte de données."
             )
         else:
-            self.disclaimer_var.set("")
+            self.disclaimer_var.set('')
 
-        # ── 3. Calcul du diff ──
         new_dev_set = {d['device'] for d in new_disks}
         old_dev_set = set(self._disk_rows.keys())
 
-        added   = new_dev_set - old_dev_set
+        added = new_dev_set - old_dev_set
         removed = old_dev_set - new_dev_set
-        kept    = new_dev_set & old_dev_set
+        kept = new_dev_set & old_dev_set
 
-        # ── 4. Suppressions : disques débranchés ──
         for dev in removed:
             self._remove_disk_row(dev)
 
-        # ── 5. Mises à jour : disques déjà présents ──
         new_disk_map = {d['device']: d for d in new_disks}
         for dev in kept:
             self._update_disk_row(dev, new_disk_map[dev], active_physical_drives)
-
-        # ── 6. Ajouts : nouveaux disques ──
         for dev in added:
             self._create_disk_row(new_disk_map[dev], active_physical_drives)
 
-        # Cas liste vide
         if not new_disks:
-            if not self._disk_rows:
-                if not self.scrollable_disk_frame.winfo_children():
-                    ttk.Label(self.scrollable_disk_frame, text="No disks found").pack(pady=10)
-            self.disclaimer_var.set("")
-            self.ssd_disclaimer_var.set("")
+            if not self._disk_rows and not self.scrollable_disk_frame.winfo_children():
+                tk.Label(self.scrollable_disk_frame, text='Aucun disque détecté',
+                         bg=self._BG_ELEVATED, fg=self._TEXT_DIM,
+                         font=('Segoe UI', 10)).pack(pady=20)
+            self.disclaimer_var.set('')
+            self.ssd_disclaimer_var.set('')
+            self._disk_count_var.set('0 disque')
             return
 
-        # ── 7. Disclaimer SSD ──
         has_ssd = False
         for disk in new_disks:
             try:
@@ -380,37 +712,33 @@ class DiskEraserGUI:
             except Exception:
                 pass
         self.ssd_disclaimer_var.set(
-            "WARNING: SSD devices detected. Multiple-pass erasure may damage SSDs "
-            "and NOT achieve secure data deletion due to SSD wear leveling. "
-            "For SSDs, use cryptographic erase mode instead."
-            if has_ssd else ""
+            "ℹ SSD détecté. L’effacement multi-passes peut user le support et n’est pas le meilleur choix. Privilégiez l’effacement cryptographique."
+            if has_ssd else ''
         )
 
         self.disks = new_disks
+        self._disk_count_var.set(f"{len(new_disks)} disque{'s' if len(new_disks) > 1 else ''}")
+        selected_count = sum(1 for var in self.disk_vars.values() if var.get())
+        self._progress_stats_var.set(f"{selected_count} sélectionné{'s' if selected_count > 1 else ''}")
 
-    # ── Méthode d'effacement ───────────────────────────────────────────────────
     def update_method_options(self) -> None:
-        """Update UI based on the selected erasure method"""
         method = self.erase_method_var.get()
-        self.crypto_fill_frame.pack(fill=tk.X, pady=10, padx=5, after=self.passes_frame)
         for child in self.crypto_fill_frame.winfo_children():
             try:
-                child.configure(state="normal" if method == "crypto" else "disabled")
+                child.configure(state='normal' if method == 'crypto' else 'disabled')
             except tk.TclError:
                 pass
         for child in self.passes_frame.winfo_children():
             if isinstance(child, ttk.Entry):
                 try:
-                    child.configure(state="disabled" if method == "crypto" else "normal")
+                    child.configure(state='disabled' if method == 'crypto' else 'normal')
                 except tk.TclError:
                     pass
 
-    # ── Format only ───────────────────────────────────────────────────────────
     def format_only(self) -> None:
-        """Format selected disks without erasing them first."""
         selected_disks = [disk for disk, var in self.disk_vars.items() if var.get()]
         if not selected_disks:
-            messagebox.showwarning("Warning", "No disks selected!")
+            messagebox.showwarning('Avertissement', 'Aucun disque sélectionné.')
             return
 
         disk_identifiers = []
@@ -419,213 +747,207 @@ class DiskEraserGUI:
             try:
                 disk_identifier = get_disk_serial(disk_name)
             except (CalledProcessError, SubprocessError) as e:
-                disk_identifier = f"{disk_name} (Serial unavailable)"
-                self.update_gui_log(f"Error getting serial for {disk_name}: {str(e)}")
-                log_error(f"Error getting serial for {disk_name}: {str(e)}")
+                disk_identifier = f"{disk_name} (numéro de série indisponible)"
+                self.update_gui_log(f"Erreur lors de la récupération du numéro de série de {disk_name} : {str(e)}")
+                log_error(f"Erreur lors de la récupération du numéro de série de {disk_name} : {str(e)}")
             except FileNotFoundError as e:
-                disk_identifier = f"{disk_name} (Serial command not found)"
-                self.update_gui_log(f"Required command not found for getting serial of {disk_name}: {str(e)}")
-                log_error(f"Required command not found for getting serial of {disk_name}: {str(e)}")
+                disk_identifier = f"{disk_name} (commande introuvable)"
+                self.update_gui_log(f"Commande introuvable pour obtenir le numéro de série de {disk_name} : {str(e)}")
+                log_error(f"Commande introuvable pour obtenir le numéro de série de {disk_name} : {str(e)}")
             except PermissionError as e:
-                disk_identifier = f"{disk_name} (Permission denied)"
-                self.update_gui_log(f"Permission denied getting serial for {disk_name}: {str(e)}")
-                log_error(f"Permission denied getting serial for {disk_name}: {str(e)}")
+                disk_identifier = f"{disk_name} (permission refusée)"
+                self.update_gui_log(f"Permission refusée pour obtenir le numéro de série de {disk_name} : {str(e)}")
+                log_error(f"Permission refusée pour obtenir le numéro de série de {disk_name} : {str(e)}")
             except (IOError, OSError) as e:
-                disk_identifier = f"{disk_name} (IO error)"
-                self.update_gui_log(f"IO error getting serial for {disk_name}: {str(e)}")
-                log_error(f"IO error getting serial for {disk_name}: {str(e)}")
+                disk_identifier = f"{disk_name} (erreur d’E/S)"
+                self.update_gui_log(f"Erreur d’E/S lors de la récupération du numéro de série de {disk_name} : {str(e)}")
+                log_error(f"Erreur d’E/S lors de la récupération du numéro de série de {disk_name} : {str(e)}")
             disk_identifiers.append(disk_identifier)
 
-        disk_list = "\n".join(disk_identifiers)
+        disk_list = '\n'.join(disk_identifiers)
         fs_choice = self.filesystem_var.get()
-        if not messagebox.askyesno("Confirm Format",
-                                   f"WARNING: You are about to format the following disks as {fs_choice}:\n\n{disk_list}\n\n"
-                                   "All existing data will be lost!\n\n"
-                                   "Do you want to continue?"):
+        if not messagebox.askyesno(
+            'Confirmer le formatage',
+            f"Attention : vous êtes sur le point de formater les disques suivants en {fs_choice} :\n\n{disk_list}\n\n"
+            "Toutes les données existantes seront perdues.\n\n"
+            "Voulez-vous continuer ?",
+        ):
             return
 
-        self.status_var.set("Starting format process...")
+        self._set_status('Préparation du formatage…', 'busy')
+        self._progress_phase_var.set('Formatage')
+        self._progress_detail_var.set('Préparation des tâches de formatage')
+        self._progress_stats_var.set(f"{len(selected_disks)} disque{'s' if len(selected_disks) > 1 else ''}")
+        self.update_progress(0)
         try:
-            threading.Thread(target=self.format_disks_thread,
-                             args=(selected_disks, fs_choice), daemon=True).start()
+            threading.Thread(target=self.format_disks_thread, args=(selected_disks, fs_choice), daemon=True).start()
         except (RuntimeError, OSError) as e:
-            error_msg = f"Error starting format thread: {str(e)}"
-            messagebox.showerror("Thread Error", error_msg)
+            error_msg = f"Erreur lors du démarrage du thread de formatage : {str(e)}"
+            messagebox.showerror('Erreur de thread', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
-            self.status_var.set("Ready")
+            self._set_status('Prêt', 'idle')
 
     def format_disks_thread(self, disks, fs_choice):
-        """Thread function to format disks."""
-        start_msg = f"Starting format of {len(disks)} disk(s) as {fs_choice}"
+        start_msg = f"Démarrage du formatage de {len(disks)} disque(s) en {fs_choice}"
         self.update_gui_log(start_msg)
         log_info(start_msg)
         total_disks = len(disks)
         completed_disks = 0
         try:
             with ThreadPoolExecutor() as executor:
-                futures = {executor.submit(self.format_single_disk, disk, fs_choice): disk
-                           for disk in disks}
+                futures = {executor.submit(self.format_single_disk, disk, fs_choice): disk for disk in disks}
                 for future in as_completed(futures):
                     disk = futures[future]
                     try:
                         future.result()
                         completed_disks += 1
-                        self.update_progress((completed_disks / total_disks) * 100)
-                        self.status_var.set(f"Formatted {completed_disks}/{total_disks} disks")
+                        pct = (completed_disks / total_disks) * 100
+                        self.update_progress(pct)
+                        self._progress_detail_var.set(f"Formatage terminé pour {disk.replace('/dev/', '')}")
+                        self._progress_stats_var.set(f"{completed_disks}/{total_disks} terminé{'s' if completed_disks > 1 else ''}")
+                        self._set_status(f"Formatage : {completed_disks}/{total_disks} terminé", 'busy')
                     except Exception as e:
-                        error_msg = f"Error formatting disk {disk}: {str(e)}"
+                        error_msg = f"Erreur lors du formatage du disque {disk} : {str(e)}"
                         self.update_gui_log(error_msg)
                         log_error(error_msg)
         except Exception as e:
-            error_msg = f"Error with thread pool executor during format: {str(e)}"
+            error_msg = f"Erreur du pool de threads pendant le formatage : {str(e)}"
             self.update_gui_log(error_msg)
             log_error(error_msg)
-        self.status_var.set("Format process completed")
-        log_info("Format process completed")
+        self._set_status('Formatage terminé', 'idle')
+        self._progress_phase_var.set('Terminé')
+        self._progress_detail_var.set('Opération de formatage terminée')
+        log_info('Format process completed')
         try:
-            messagebox.showinfo("Complete", "Disk formatting operation has completed!")
+            messagebox.showinfo('Terminé', 'L’opération de formatage est terminée.')
         except tk.TclError as e:
-            self.update_gui_log(f"Error showing completion dialog: {str(e)}")
+            self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
 
     def format_single_disk(self, disk, fs_choice):
-        """Format a single disk."""
         disk_name = disk.replace('/dev/', '')
         try:
             disk_id = get_disk_serial(disk_name)
-            self.status_var.set(f"Formatting {disk_id}...")
+            self._set_status(f"Formatage de {disk_id}…", 'busy')
+            self._progress_detail_var.set(f"Formatage de {disk_id}")
             log_info(f"Formatting {disk_id} as {fs_choice}")
         except Exception as e:
-            self.update_gui_log(f"Error getting disk serial: {str(e)}")
-            self.status_var.set(f"Formatting {disk_name}...")
+            self.update_gui_log(f"Erreur lors de la récupération du numéro de série : {str(e)}")
+            self._set_status(f"Formatage de {disk_name}…", 'busy')
+            self._progress_detail_var.set(f"Formatage de {disk_name}")
             log_info(f"Formatting {disk_name} as {fs_choice}")
         try:
             partition_disk(disk_name)
-            self.update_gui_log(f"Partitioned {disk_name}")
+            self.update_gui_log(f"Partitionnement de {disk_name} effectué")
             format_disk(disk_name, fs_choice)
-            self.update_gui_log(f"Successfully formatted {disk_name} as {fs_choice}")
+            self.update_gui_log(f"{disk_name} formaté avec succès en {fs_choice}")
             log_info(f"Successfully formatted {disk_name} as {fs_choice}")
         except (CalledProcessError, FileNotFoundError, PermissionError, IOError, OSError,
                 MemoryError, ValueError, TypeError, RuntimeError) as e:
-            error_msg = f"Error formatting {disk_name}: {str(e)}"
+            error_msg = f"Erreur lors du formatage de {disk_name} : {str(e)}"
             self.update_gui_log(error_msg)
             log_error(error_msg)
             raise
 
-    # ── Power off ─────────────────────────────────────────────────────────────
     def power_off_system(self) -> None:
-        """Power off the system after confirmation."""
         import subprocess
-        if not messagebox.askyesno("Confirm Power Off",
-                                   "Are you sure you want to power off the system?\n\n"
-                                   "All unsaved work will be lost!"):
+        if not messagebox.askyesno(
+            'Confirmer l’arrêt',
+            'Voulez-vous vraiment éteindre le système ?\n\nTout travail non enregistré sera perdu.',
+        ):
             return
-        if not messagebox.askyesno("FINAL WARNING",
-                                   "This will shut down the computer immediately.\n\n"
-                                   "Do you want to proceed?"):
-            return
+
         try:
-            log_info("System power off initiated by user")
-            self.update_gui_log("Powering off system...")
+            log_info('System power off initiated by user')
+            self.update_gui_log('Extinction du système…')
             session_end()
             time.sleep(1)
-            subprocess.run(["poweroff"], check=True)
+            subprocess.run(['poweroff'], check=True)
         except subprocess.CalledProcessError as e:
-            error_msg = f"Error executing poweroff command: {str(e)}"
-            messagebox.showerror("Power Off Error", error_msg)
+            error_msg = f"Erreur lors de l’exécution de la commande d’arrêt : {str(e)}"
+            messagebox.showerror('Erreur d’arrêt', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
         except FileNotFoundError:
-            error_msg = "Poweroff command not found. Try 'shutdown -h now' manually."
-            messagebox.showerror("Command Not Found", error_msg)
+            error_msg = "Commande poweroff introuvable. Essayez 'shutdown -h now' manuellement."
+            messagebox.showerror('Commande introuvable', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
         except (PermissionError, IOError, OSError, MemoryError, ValueError, TypeError) as e:
-            error_msg = f"System error during poweroff: {str(e)}"
-            messagebox.showerror("System Error", error_msg)
+            error_msg = f"Erreur système pendant l’arrêt : {str(e)}"
+            messagebox.showerror('Erreur système', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
 
-    # ── External storage helpers ───────────────────────────────────────────────
     def _get_external_disks(self) -> list:
-        """
-        Return a list of dicts describing block devices that are NOT the
-        active system disk and NOT a pure virtual/loop device.
+        import json as _json
+        import subprocess as _sp
 
-        Each dict has:
-          device       – base device name, e.g. 'sdb'
-          path         – full path, e.g. '/dev/sdb'
-          size         – human-readable size from lsblk
-          model        – model string (may be empty)
-          partitions   – list of partition names, e.g. ['sdb1', 'sdb2']
-          mount_points – dict {partition_name: mount_point or None}
-        """
-        import subprocess as _sp, json as _json
         active_disks = set(self.active_disk or [])
         result = []
         try:
-            raw = _sp.run(["lsblk", "-J", "-o", "NAME,SIZE,TYPE,MODEL,MOUNTPOINT"],
+            raw = _sp.run(['lsblk', '-J', '-o', 'NAME,SIZE,TYPE,MODEL,MOUNTPOINT'],
                           stdout=_sp.PIPE, stderr=_sp.PIPE).stdout.decode()
             data = _json.loads(raw)
         except Exception as e:
             log_error(f"lsblk JSON failed: {e}")
             return result
-        for dev in data.get("blockdevices", []):
-            dev_name = dev.get("name", "")
-            if dev.get("type") != "disk":
+
+        for dev in data.get('blockdevices', []):
+            dev_name = dev.get('name', '')
+            if dev.get('type') != 'disk':
                 continue
-            if dev_name in active_disks or dev_name.startswith("loop"):
+            if dev_name in active_disks or dev_name.startswith('loop'):
                 continue
             partitions, mount_map = [], {}
-            children = dev.get("children") or []
+            children = dev.get('children') or []
             if children:
                 for child in children:
-                    if child.get("type") == "part":
-                        p = child["name"]
+                    if child.get('type') == 'part':
+                        p = child['name']
                         partitions.append(p)
-                        mount_map[p] = child.get("mountpoint") or None
+                        mount_map[p] = child.get('mountpoint') or None
             else:
                 partitions.append(dev_name)
-                mount_map[dev_name] = dev.get("mountpoint") or None
+                mount_map[dev_name] = dev.get('mountpoint') or None
             result.append({
-                "device": dev_name, "path": f"/dev/{dev_name}",
-                "size": dev.get("size", "?"),
-                "model": (dev.get("model") or "").strip(),
-                "partitions": partitions, "mount_points": mount_map,
+                'device': dev_name,
+                'path': f"/dev/{dev_name}",
+                'size': dev.get('size', '?'),
+                'model': (dev.get('model') or '').strip(),
+                'partitions': partitions,
+                'mount_points': mount_map,
             })
         return result
 
-    def _mount_partition(self, partition: str) -> "str | None":
-        """
-        Mount /dev/<partition> to a unique temp directory.
-        Returns the mount point on success, None on failure.
-        """
-        import subprocess as _sp, tempfile as _tf
-        mount_dir = _tf.mkdtemp(prefix="disk_eraser_export_")
+    def _mount_partition(self, partition: str) -> 'str | None':
+        import subprocess as _sp
+        import tempfile as _tf
+
+        mount_dir = _tf.mkdtemp(prefix='disk_eraser_export_')
         try:
-            r = _sp.run(["mount", f"/dev/{partition}", mount_dir],
-                        stdout=_sp.PIPE, stderr=_sp.PIPE)
+            r = _sp.run(['mount', f"/dev/{partition}", mount_dir], stdout=_sp.PIPE, stderr=_sp.PIPE)
             if r.returncode != 0:
                 log_error(f"mount /dev/{partition} -> {mount_dir} failed: {r.stderr.decode().strip()}")
                 try:
-                    import os as _os; _os.rmdir(mount_dir)
+                    os.rmdir(mount_dir)
                 except OSError:
                     pass
                 return None
             log_info(f"Mounted /dev/{partition} at {mount_dir}")
             return mount_dir
         except FileNotFoundError:
-            log_error("mount command not found")
+            log_error('mount command not found')
             return None
         except Exception as e:
             log_error(f"Unexpected error mounting /dev/{partition}: {e}")
             return None
 
     def _unmount_partition(self, mount_dir: str) -> None:
-        """Unmount and remove the temporary mount directory."""
-        import subprocess as _sp, os as _os
+        import subprocess as _sp
+
         try:
-            r = _sp.run(["umount", mount_dir], stdout=_sp.PIPE, stderr=_sp.PIPE)
+            r = _sp.run(['umount', mount_dir], stdout=_sp.PIPE, stderr=_sp.PIPE)
             if r.returncode != 0:
                 log_error(f"umount {mount_dir} failed: {r.stderr.decode().strip()}")
             else:
@@ -634,222 +956,245 @@ class DiskEraserGUI:
             log_error(f"Error during umount {mount_dir}: {e}")
         finally:
             try:
-                _os.rmdir(mount_dir)
+                os.rmdir(mount_dir)
             except OSError:
                 pass
 
     def _show_disk_picker(self, external_disks: list):
-        """
-        Modal dialog that lets the user pick one partition from the list of
-        external disks. Returns (partition_name, was_already_mounted,
-        existing_mount_point) or (None, False, None) if cancelled.
-        """
         import tkinter as _tk
-        from tkinter import ttk as _ttk
-        result = {"partition": None, "already_mounted": False, "mount_point": None}
+
+        result = {'partition': None, 'already_mounted': False, 'mount_point': None}
         dlg = _tk.Toplevel(self.root)
-        dlg.title("Sélectionner le support externe")
+        dlg.title('Sélectionner le support externe')
+        dlg.configure(bg=self._BG)
         dlg.grab_set()
         dlg.resizable(False, False)
-        _ttk.Label(dlg, text="Choisissez le support externe pour l'export PDF",
-                   font=("Arial", 11, "bold"), padding=(10, 10)).pack(fill=_tk.X)
-        _ttk.Label(dlg, text="Seuls les disques hors système sont listés.\n"
-                   "Le support sera monté automatiquement si nécessaire.",
-                   foreground="#555555", padding=(10, 0, 10, 6)).pack(fill=_tk.X)
-        frame = _ttk.Frame(dlg, padding=(10, 0, 10, 6))
-        frame.pack(fill=_tk.BOTH, expand=True)
-        lb = _tk.Listbox(frame, width=68, height=12, font=("Courier", 9),
-                         selectmode=_tk.SINGLE, activestyle="dotbox")
-        sb = _ttk.Scrollbar(frame, orient=_tk.VERTICAL, command=lb.yview)
+
+        hdr = _tk.Frame(dlg, bg=self._SURFACE, pady=12, padx=16)
+        hdr.pack(fill=_tk.X)
+        _tk.Frame(hdr, bg=self._ACCENT2, width=4).pack(side=_tk.LEFT, fill=_tk.Y)
+        title_dlg = _tk.Frame(hdr, bg=self._SURFACE, padx=8)
+        title_dlg.pack(side=_tk.LEFT, fill=_tk.Y)
+        _tk.Label(title_dlg, text='Support externe', bg=self._SURFACE, fg=self._TEXT,
+                  font=('Segoe UI', 12, 'bold')).pack(anchor='w')
+        _tk.Label(hdr, text="Choisissez la partition cible pour l’export PDF.",
+                  bg=self._SURFACE, fg=self._TEXT_DIM, font=('Segoe UI', 9)).pack(anchor='w', pady=(3, 0))
+        _tk.Frame(dlg, bg=self._BORDER, height=1).pack(fill=_tk.X)
+
+        list_frame = _tk.Frame(dlg, bg=self._BG, padx=14, pady=12)
+        list_frame.pack(fill=_tk.BOTH, expand=True)
+
+        lb = _tk.Listbox(
+            list_frame,
+            width=68,
+            height=12,
+            font=('Courier New', 9),
+            selectmode=_tk.SINGLE,
+            activestyle='dotbox',
+            bg=self._SURFACE,
+            fg=self._TEXT,
+            selectbackground=self._ACCENT,
+            selectforeground='white',
+            highlightthickness=1,
+            highlightcolor=self._BORDER,
+            highlightbackground=self._BORDER,
+            bd=0,
+            relief=_tk.FLAT,
+        )
+        sb = _tk.Scrollbar(list_frame, orient=_tk.VERTICAL, command=lb.yview,
+                           bg=self._SURFACE2, troughcolor=self._BG,
+                           activebackground=self._BORDER)
         lb.configure(yscrollcommand=sb.set)
         lb.pack(side=_tk.LEFT, fill=_tk.BOTH, expand=True)
         sb.pack(side=_tk.RIGHT, fill=_tk.Y)
+
         entries = []
         for disk in external_disks:
-            model_str = f" [{disk['model']}]" if disk['model'] else ""
+            model_str = f" [{disk['model']}]" if disk['model'] else ''
             lb.insert(_tk.END, f"── {disk['path']} {disk['size']}{model_str}")
-            lb.itemconfig(_tk.END, foreground="#333388", background="#eeeeff")
+            lb.itemconfig(_tk.END, foreground=self._SSD_COLOR, background=self._SURFACE2)
             entries.append(None)
-            for part in disk["partitions"]:
-                mp = disk["mount_points"].get(part)
+            for part in disk['partitions']:
+                mp = disk['mount_points'].get(part)
                 lb.insert(_tk.END, f"   /dev/{part:<14} {'monté sur ' + mp if mp else 'non monté'}")
                 entries.append((part, mp is not None, mp))
-        btn_frame = _ttk.Frame(dlg, padding=(10, 6))
+
+        _tk.Frame(dlg, bg=self._BORDER, height=1).pack(fill=_tk.X)
+        btn_frame = _tk.Frame(dlg, bg=self._SURFACE, padx=14, pady=10)
         btn_frame.pack(fill=_tk.X)
+
         def on_select():
             sel = lb.curselection()
             if not sel:
-                messagebox.showwarning("Aucune sélection", "Veuillez sélectionner une partition.", parent=dlg)
+                messagebox.showwarning('Aucune sélection', 'Veuillez sélectionner une partition.', parent=dlg)
                 return
             entry = entries[sel[0]]
             if entry is None:
-                messagebox.showwarning("Sélection invalide",
-                                       "Veuillez sélectionner une partition,\npas un en-tête de disque.",
-                                       parent=dlg)
+                messagebox.showwarning(
+                    'Sélection invalide',
+                    'Veuillez sélectionner une partition,\npas un en-tête de disque.',
+                    parent=dlg,
+                )
                 return
-            result["partition"], result["already_mounted"], result["mount_point"] = entry
+            result['partition'], result['already_mounted'], result['mount_point'] = entry
             dlg.destroy()
+
         def on_cancel():
             dlg.destroy()
-        _ttk.Button(btn_frame, text="Sélectionner", command=on_select).pack(side=_tk.LEFT, padx=4)
-        _ttk.Button(btn_frame, text="Annuler", command=on_cancel).pack(side=_tk.LEFT, padx=4)
+
+        select_btn = _tk.Button(btn_frame, text='  Sélectionner  ', command=on_select,
+                                bg=self._ACCENT, fg='white', activebackground=self._ACCENT2,
+                                activeforeground='white', font=('Segoe UI', 10, 'bold'),
+                                bd=0, padx=10, pady=7, cursor='hand2', relief=_tk.FLAT)
+        select_btn.pack(side=_tk.LEFT, padx=(0, 8))
+
+        cancel_btn = _tk.Button(btn_frame, text='  Annuler  ', command=on_cancel,
+                                bg=self._SURFACE2, fg=self._TEXT_DIM,
+                                activebackground=self._SURFACE3, activeforeground=self._TEXT,
+                                font=('Segoe UI', 10), bd=0, padx=10, pady=6,
+                                cursor='hand2', relief=_tk.FLAT)
+        cancel_btn.pack(side=_tk.LEFT)
+
         dlg.update_idletasks()
         w, h = dlg.winfo_reqwidth(), dlg.winfo_reqheight()
-        dlg.geometry(f"+{self.root.winfo_rootx() + (self.root.winfo_width() - w) // 2}"
-                     f"+{self.root.winfo_rooty() + (self.root.winfo_height() - h) // 2}")
+        dlg.geometry(
+            f"+{self.root.winfo_rootx() + (self.root.winfo_width() - w) // 2}"
+            f"+{self.root.winfo_rooty() + (self.root.winfo_height() - h) // 2}"
+        )
         self.root.wait_window(dlg)
-        return result["partition"], result["already_mounted"], result["mount_point"]
+        return result['partition'], result['already_mounted'], result['mount_point']
 
     def _request_external_export_path(self, default_filename: str):
-        """
-        Full workflow:
-        1. Detect external disks (mounted or not).
-        2. Show the disk picker dialog.
-        3. If the chosen partition is not mounted, mount it to a temp dir.
-        4. Open the standard Tk save-as dialog on that mount point.
-        5. Validate the destination is still on the external mount.
-        6. Return the chosen path (caller is responsible for unmounting via
-           self._pending_unmount_dir after PDF is written).
-
-        Returns:
-            str | None: Chosen absolute file path, or None if cancelled.
-        """
         external_disks = self._get_external_disks()
         if not external_disks:
-            messagebox.showerror("Aucun support externe détecté",
-                                 "Aucun disque externe n'a été détecté.\n\n"
-                                 "Branchez une clé USB, un disque dur externe ou tout autre "
-                                 "support amovible, puis réessayez.")
+            messagebox.showerror(
+                'Aucun support externe détecté',
+                "Aucun disque externe n’a été détecté.\n\nBranchez une clé USB, un disque dur externe ou tout autre support amovible, puis réessayez.",
+            )
             return None
+
         partition, already_mounted, existing_mp = self._show_disk_picker(external_disks)
         if not partition:
             return None
+
         self._pending_unmount_dir = None
         if already_mounted and existing_mp:
             mount_point = existing_mp
         else:
-            self.status_var.set(f"Montage de /dev/{partition}…")
+            self._set_status(f"Montage de /dev/{partition}…", 'busy')
             self.root.update_idletasks()
             mount_point = self._mount_partition(partition)
             if not mount_point:
-                messagebox.showerror("Erreur de montage",
-                                     f"Impossible de monter /dev/{partition}.\n\n"
-                                     "Vérifiez que le support est correctement branché et "
-                                     "que le système de fichiers est supporté (ext4, NTFS, FAT32…).")
-                self.status_var.set("Prêt")
+                messagebox.showerror(
+                    'Erreur de montage',
+                    f"Impossible de monter /dev/{partition}.\n\nVérifiez que le support est correctement branché et que le système de fichiers est pris en charge (ext4, NTFS, FAT32…).",
+                )
+                self._set_status('Prêt', 'idle')
                 return None
             self._pending_unmount_dir = mount_point
+
         chosen_path = filedialog.asksaveasfilename(
-            title="Exporter le PDF — support externe",
+            title='Exporter le PDF — support externe',
             initialdir=mount_point,
             initialfile=default_filename,
-            defaultextension=".pdf",
-            filetypes=[("Fichiers PDF", "*.pdf"), ("Tous les fichiers", "*.*")],
+            defaultextension='.pdf',
+            filetypes=[('Fichiers PDF', '*.pdf'), ('Tous les fichiers', '*.*')],
         )
         if not chosen_path:
             if self._pending_unmount_dir:
-                self.status_var.set(f"Démontage de /dev/{partition}…")
+                self._set_status(f"Démontage de /dev/{partition}…", 'busy')
                 self.root.update_idletasks()
                 self._unmount_partition(self._pending_unmount_dir)
                 self._pending_unmount_dir = None
-            self.status_var.set("Prêt")
+            self._set_status('Prêt', 'idle')
             return None
-        import os as _os
-        mp_norm   = mount_point.rstrip('/') + '/'
-        path_norm = _os.path.abspath(chosen_path).rstrip('/') + '/'
+
+        mp_norm = mount_point.rstrip('/') + '/'
+        path_norm = os.path.abspath(chosen_path).rstrip('/') + '/'
         if not path_norm.startswith(mp_norm):
-            messagebox.showwarning("Destination invalide",
-                                   "Le chemin choisi n'est pas sur le support externe monté.\n"
-                                   f"Veuillez choisir un emplacement sous : {mount_point}")
+            messagebox.showwarning(
+                'Destination invalide',
+                f"Le chemin choisi n’est pas sur le support externe monté.\nVeuillez choisir un emplacement sous : {mount_point}",
+            )
             if self._pending_unmount_dir:
                 self._unmount_partition(self._pending_unmount_dir)
                 self._pending_unmount_dir = None
             return None
         return chosen_path
 
-    def _finalize_export(self, partition_label: str = "") -> None:
-        """
-        Unmount the temporary mount directory that was created during an export
-        (if any). Called after the PDF has been successfully written.
-        """
+    def _finalize_export(self) -> None:
         if getattr(self, '_pending_unmount_dir', None):
-            self.status_var.set("Démontage du support externe…")
+            self._set_status('Démontage du support externe…', 'busy')
             self.root.update_idletasks()
             self._unmount_partition(self._pending_unmount_dir)
             self._pending_unmount_dir = None
-            self.status_var.set("Support externe démonté.")
-            self.update_gui_log("Support externe démonté avec succès.")
+            self._set_status('Support externe démonté', 'info')
+            self.update_gui_log('Support externe démonté avec succès.')
 
     def print_session_log(self) -> None:
-        """Generate and save session log as PDF to an external storage device."""
         from datetime import datetime as _dt
+
         default_name = f"session_log_{_dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         export_path = self._request_external_export_path(default_name)
         if not export_path:
-            self.update_gui_log("Export PDF session annulé.")
-            self.status_var.set("Prêt")
+            self.update_gui_log('Export du PDF de session annulé.')
+            self._set_status('Prêt', 'idle')
             return
         try:
-            self.status_var.set("Génération du PDF de session…")
+            self._set_status('Génération du PDF de session…', 'busy')
             pdf_path = generate_session_pdf(output_path=export_path)
             self._finalize_export()
-            messagebox.showinfo("PDF Exporté",
-                                f"PDF de session exporté avec succès !\nEnregistré : {pdf_path}")
+            messagebox.showinfo('PDF exporté', f"PDF de session exporté avec succès.\nEnregistré ici : {pdf_path}")
             self.update_gui_log(f"PDF de session enregistré : {pdf_path}")
-            self.status_var.set("PDF de session exporté")
+            self._set_status('PDF de session exporté', 'info')
         except Exception as e:
-            error_msg = f"Error generating session log PDF: {str(e)}"
-            messagebox.showerror("Error", error_msg)
+            error_msg = f"Erreur lors de la génération du PDF de session : {str(e)}"
+            messagebox.showerror('Erreur', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
-            self.status_var.set("Ready")
+            self._set_status('Prêt', 'idle')
 
     def print_complete_log(self) -> None:
-        """Generate and save complete log file as PDF to an external storage device."""
         from datetime import datetime as _dt
+
         default_name = f"complete_log_{_dt.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         export_path = self._request_external_export_path(default_name)
         if not export_path:
-            self.update_gui_log("Export PDF journal complet annulé.")
-            self.status_var.set("Prêt")
+            self.update_gui_log('Export du PDF complet annulé.')
+            self._set_status('Prêt', 'idle')
             return
         try:
-            self.status_var.set("Génération du PDF journal complet…")
+            self._set_status('Génération du PDF complet…', 'busy')
             pdf_path = generate_log_file_pdf(output_path=export_path)
             self._finalize_export()
-            messagebox.showinfo("PDF Exporté",
-                                f"PDF journal complet exporté avec succès !\nEnregistré : {pdf_path}")
-            self.update_gui_log(f"PDF journal complet enregistré : {pdf_path}")
-            self.status_var.set("PDF journal complet exporté")
+            messagebox.showinfo('PDF exporté', f"PDF complet exporté avec succès.\nEnregistré ici : {pdf_path}")
+            self.update_gui_log(f"PDF complet enregistré : {pdf_path}")
+            self._set_status('PDF complet exporté', 'info')
         except Exception as e:
-            error_msg = f"Error generating complete log PDF: {str(e)}"
-            messagebox.showerror("Error", error_msg)
+            error_msg = f"Erreur lors de la génération du PDF complet : {str(e)}"
+            messagebox.showerror('Erreur', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
-            self.status_var.set("Ready")
+            self._set_status('Prêt', 'idle')
 
-    # ── Contrôles généraux ────────────────────────────────────────────────────
     def exit_application(self) -> None:
-        """Log and close the application when Exit is clicked"""
-        exit_message = "Application closed by user via Exit button"
+        exit_message = 'Application fermée par l’utilisateur via le bouton Quitter'
         log_info(exit_message)
         self.update_gui_log(exit_message)
         session_end()
         self.root.destroy()
 
     def toggle_fullscreen(self) -> None:
-        """Toggle fullscreen mode"""
         try:
-            self.root.attributes("-fullscreen", not self.root.attributes("-fullscreen"))
+            self.root.attributes('-fullscreen', not self.root.attributes('-fullscreen'))
         except tk.TclError as e:
-            self.update_gui_log(f"Error toggling fullscreen mode: {str(e)}")
-            log_error(f"Error toggling fullscreen mode: {str(e)}")
+            self.update_gui_log(f"Erreur lors du basculement en plein écran : {str(e)}")
+            log_error(f"Erreur lors du basculement en plein écran : {str(e)}")
 
-    # ── Effacement ────────────────────────────────────────────────────────────
     def start_erasure(self) -> None:
         selected_disks = [disk for disk, var in self.disk_vars.items() if var.get()]
         if not selected_disks:
-            messagebox.showwarning("Warning", "No disks selected!")
+            messagebox.showwarning('Avertissement', 'Aucun disque sélectionné.')
             return
 
         active_disk_selected = any(
@@ -857,17 +1202,19 @@ class DiskEraserGUI:
             for d in selected_disks
         )
         if active_disk_selected:
-            if not messagebox.askyesno("DANGER - SYSTEM DISK SELECTED",
-                                       "WARNING: You have selected the ACTIVE SYSTEM DISK!\n\n"
-                                       "Erasing this disk will CRASH your system and cause PERMANENT DATA LOSS!\n\n"
-                                       "Are you absolutely sure you want to continue?",
-                                       icon="warning"):
+            if not messagebox.askyesno(
+                'Danger — disque système sélectionné',
+                'Attention : vous avez sélectionné le disque système actif.\n\n'
+                'L’effacement de ce disque peut faire tomber le système et provoquer une perte définitive des données.\n\n'
+                'Voulez-vous vraiment continuer ?',
+                icon='warning',
+            ):
                 return
 
         erase_method = self.erase_method_var.get()
 
         ssd_selected = False
-        if erase_method == "overwrite":
+        if erase_method == 'overwrite':
             for disk in selected_disks:
                 try:
                     if is_ssd(disk.replace('/dev/', '')):
@@ -876,15 +1223,17 @@ class DiskEraserGUI:
                 except Exception:
                     pass
         if ssd_selected:
-            if not messagebox.askyesno("WARNING - SSD DEVICE SELECTED",
-                                       "WARNING: You have selected one or more SSD devices!\n\n"
-                                       "Using multiple-pass erasure on SSDs can:\n"
-                                       "• Damage the SSD by causing excessive wear\n"
-                                       "• Fail to securely erase data due to SSD wear leveling\n"
-                                       "• Not overwrite all sectors due to over-provisioning\n\n"
-                                       "For SSDs, use cryptographic erasure\n\n"
-                                       "Do you still want to continue?",
-                                       icon="warning"):
+            if not messagebox.askyesno(
+                'Avertissement — SSD sélectionné',
+                'Attention : vous avez sélectionné un ou plusieurs SSD.\n\n'
+                'Un effacement multi-passes sur SSD peut :\n'
+                '• user prématurément le support\n'
+                '• ne pas garantir un effacement sûr à cause du wear leveling\n'
+                '• ne pas couvrir tous les blocs à cause de l’over-provisioning\n\n'
+                'Pour un SSD, il est préférable d’utiliser l’effacement cryptographique.\n\n'
+                'Voulez-vous continuer malgré tout ?',
+                icon='warning',
+            ):
                 return
 
         disk_identifiers = []
@@ -896,70 +1245,74 @@ class DiskEraserGUI:
                 disk_identifier = disk_name
             disk_identifiers.append(disk_identifier)
             fs_choice = self.filesystem_var.get()
-            if erase_method == "crypto":
-                method_description = f"cryptographic erasure with {self.crypto_fill_var.get()} fill"
+            if erase_method == 'crypto':
+                method_description = f"effacement cryptographique avec remplissage {self.crypto_fill_var.get()}"
             else:
-                method_description = f"standard {self.passes_var.get()}-pass overwrite"
+                method_description = f"écrasement standard en {self.passes_var.get()} passes"
             try:
                 log_erase_operation(disk_identifier, fs_choice, method_description)
             except Exception as e:
-                self.update_gui_log(f"Error logging erasure operation for {disk_identifier}: {str(e)}")
-                log_error(f"Error logging erasure operation for {disk_identifier}: {str(e)}")
+                self.update_gui_log(f"Erreur lors de la journalisation de l’opération pour {disk_identifier} : {str(e)}")
+                log_error(f"Erreur lors de la journalisation de l’opération pour {disk_identifier} : {str(e)}")
 
-        disk_list  = "\n".join(disk_identifiers)
-        method_info = (f"using cryptographic erasure with {self.crypto_fill_var.get()} fill"
-                       if erase_method == "crypto"
-                       else f"with {self.passes_var.get()} pass overwrite")
-        if not messagebox.askyesno("Confirm Erasure",
-                                   f"WARNING: You are about to securely erase the following disks {method_info}:\n\n{disk_list}\n\n"
-                                   "This operation CANNOT be undone and ALL DATA WILL BE LOST!\n\n"
-                                   "Are you absolutely sure you want to continue?"):
-            return
-        if not messagebox.askyesno("FINAL WARNING",
-                                   "THIS IS YOUR FINAL WARNING!\n\n"
-                                   "All selected disks will be completely erased.\n\n"
-                                   "Do you want to proceed?"):
+        disk_list = '\n'.join(disk_identifiers)
+        method_info = (
+            f"avec effacement cryptographique et remplissage {self.crypto_fill_var.get()}"
+            if erase_method == 'crypto'
+            else f"avec écrasement en {self.passes_var.get()} passe(s)"
+        )
+        if not messagebox.askyesno(
+            'Confirmer l’effacement',
+            f"Attention : vous êtes sur le point d’effacer de manière sécurisée les disques suivants {method_info} :\n\n{disk_list}\n\n"
+            'Cette opération est irréversible et toutes les données seront perdues.\n\n'
+            'Voulez-vous continuer ?',
+        ):
             return
 
         passes = 1
-        if erase_method == "overwrite":
+        if erase_method == 'overwrite':
             try:
                 passes = int(self.passes_var.get())
                 if passes < 1:
-                    messagebox.showerror("Error", "Number of passes must be at least 1")
+                    messagebox.showerror('Erreur', 'Le nombre de passes doit être supérieur ou égal à 1.')
                     return
             except (ValueError, OverflowError):
-                messagebox.showerror("Error", "Number of passes must be a valid integer")
+                messagebox.showerror('Erreur', 'Le nombre de passes doit être un entier valide.')
                 return
 
-        # Mémorise les disques en cours d'effacement pour le refresh automatique
         self._erasing_devs = set(selected_disks)
-
-        self.status_var.set("Starting erasure process...")
+        self.disk_progress = {disk: 0.0 for disk in selected_disks}
+        self._progress_phase_var.set('Effacement en cours')
+        self._progress_detail_var.set('Initialisation des tâches')
+        self._progress_stats_var.set(f"0/{len(selected_disks)} terminé")
+        self.update_progress(0)
+        self._set_status('Effacement en cours…', 'busy')
+        self.refresh_disks()
         try:
-            threading.Thread(target=self.progress_state,
-                             args=(selected_disks, self.filesystem_var.get(), passes, erase_method),
-                             daemon=True).start()
+            threading.Thread(
+                target=self.progress_state,
+                args=(selected_disks, self.filesystem_var.get(), passes, erase_method),
+                daemon=True,
+            ).start()
         except (RuntimeError, OSError) as e:
-            error_msg = f"Error starting erasure thread: {str(e)}"
-            messagebox.showerror("Thread Error", error_msg)
+            error_msg = f"Erreur lors du démarrage du thread d’effacement : {str(e)}"
+            messagebox.showerror('Erreur de thread', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
             self._erasing_devs.clear()
-            self.status_var.set("Ready")
+            self._set_status('Prêt', 'idle')
 
-    def progress_state(self, disks: List[str], fs_choice: str,
-                       passes: int, erase_method: str) -> None:
-        if erase_method == "crypto":
+    def progress_state(self, disks: List[str], fs_choice: str, passes: int, erase_method: str) -> None:
+        if erase_method == 'crypto':
             fill_method = self.crypto_fill_var.get()
-            method_str = f"cryptographic erasure with {fill_method} fill"
+            method_str = f"effacement cryptographique avec remplissage {fill_method}"
         else:
-            method_str = f"standard {passes}-pass overwrite"
+            method_str = f"écrasement standard en {passes} passe(s)"
 
-        start_msg = f"Starting secure erasure of {len(disks)} disk(s) using {method_str}"
+        start_msg = f"Démarrage de l’effacement sécurisé de {len(disks)} disque(s) avec {method_str}"
         self.update_gui_log(start_msg)
         log_info(start_msg)
-        self.update_gui_log(f"Selected filesystem: {fs_choice}")
+        self.update_gui_log(f"Système de fichiers sélectionné : {fs_choice}")
         log_info(f"Selected filesystem: {fs_choice}")
 
         total_disks = len(disks)
@@ -967,7 +1320,6 @@ class DiskEraserGUI:
 
         try:
             with ThreadPoolExecutor() as executor:
-                self.disk_progress = {disk: 0 for disk in disks}
                 futures = {
                     executor.submit(self.process_disk_wrapper, disk, fs_choice, passes, erase_method): disk
                     for disk in disks
@@ -977,91 +1329,126 @@ class DiskEraserGUI:
                     try:
                         future.result()
                         completed_disks += 1
-                        # Retire le disque terminé de l'ensemble des disques en cours
+                        self.disk_progress[disk] = 100.0
                         self._erasing_devs.discard(disk)
-                        self.update_progress((completed_disks / total_disks) * 100)
-                        self.status_var.set(f"Completed {completed_disks}/{total_disks} disks")
+                        self._recompute_global_progress()
+                        self._progress_stats_var.set(f"{completed_disks}/{total_disks} terminé{'s' if completed_disks > 1 else ''}")
+                        self._progress_detail_var.set(f"Terminé : {disk.replace('/dev/', '')}")
+                        self._set_status(f"Effacement : {completed_disks}/{total_disks} terminé", 'busy')
+                        self.refresh_disks()
                     except Exception as e:
                         self._erasing_devs.discard(disk)
-                        error_msg = f"Error processing disk {disk}: {str(e)}"
+                        error_msg = f"Erreur lors du traitement du disque {disk} : {str(e)}"
                         self.update_gui_log(error_msg)
                         log_error(error_msg)
+                        self.refresh_disks()
         except Exception as e:
-            error_msg = f"Error with thread pool executor: {str(e)}"
+            error_msg = f"Erreur du pool de threads pendant l’effacement : {str(e)}"
             self.update_gui_log(error_msg)
             log_error(error_msg)
         finally:
-            # Garantit le nettoyage de l'ensemble même en cas d'exception non anticipée
             self._erasing_devs.clear()
+            self.disk_progress = {}
+            self.refresh_disks()
 
-        self.status_var.set("Erasure process completed")
-        log_info("Erasure process completed")
+        self.update_progress(100)
+        self._progress_phase_var.set('Terminé')
+        self._progress_detail_var.set("L’opération d’effacement est terminée")
+        self._set_status('Effacement terminé', 'idle')
+        log_info('Erasure process completed')
         try:
-            messagebox.showinfo("Complete", "Disk erasure operation has completed!")
+            messagebox.showinfo('Terminé', 'L’opération d’effacement est terminée.')
         except tk.TclError as e:
-            self.update_gui_log(f"Error showing completion dialog: {str(e)}")
+            self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
 
-    def process_disk_wrapper(self, disk: str, fs_choice: str,
-                              passes: int, erase_method: str) -> None:
-        """Wrapper for process_disk that updates GUI status."""
+    def process_disk_wrapper(self, disk: str, fs_choice: str, passes: int, erase_method: str) -> None:
         disk_name = disk.replace('/dev/', '')
         try:
             disk_id = get_disk_serial(disk_name)
-            self.status_var.set(f"Erasing {disk_id}...")
+            self._set_status(f"Effacement de {disk_id}…", 'busy')
+            self._progress_detail_var.set(f"Effacement de {disk_id}")
         except Exception as e:
-            self.update_gui_log(f"Error getting disk serial: {str(e)}")
-            self.status_var.set(f"Erasing {disk_name}...")
+            self.update_gui_log(f"Erreur lors de la récupération du numéro de série : {str(e)}")
+            self._set_status(f"Effacement de {disk_name}…", 'busy')
+            self._progress_detail_var.set(f"Effacement de {disk_name}")
 
         try:
-            use_crypto  = (erase_method == "crypto")
-            crypto_fill = self.crypto_fill_var.get() if use_crypto else "random"
-            process_disk(disk_name, fs_choice, passes, use_crypto, crypto_fill,
-                         log_func=self.update_gui_log)
+            use_crypto = erase_method == 'crypto'
+            crypto_fill = self.crypto_fill_var.get() if use_crypto else 'random'
+            try:
+                process_disk(
+                    disk_name,
+                    fs_choice,
+                    passes,
+                    use_crypto,
+                    crypto_fill,
+                    log_func=self.update_gui_log,
+                    progress_callback=lambda value, d=disk: self.update_individual_progress(d, value),
+                )
+            except TypeError:
+                process_disk(disk_name, fs_choice, passes, use_crypto, crypto_fill, log_func=self.update_gui_log)
+                self.update_individual_progress(disk, 100)
         except Exception as e:
-            self.update_gui_log(f"Error processing {disk_name}: {str(e)}")
+            self.update_gui_log(f"Erreur lors du traitement de {disk_name} : {str(e)}")
             raise
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    def update_individual_progress(self, disk: str, value: float) -> None:
+        try:
+            numeric = max(0.0, min(100.0, float(value)))
+        except (ValueError, TypeError):
+            return
+        self.disk_progress[disk] = numeric
+        self._progress_detail_var.set(f"{disk.replace('/dev/', '')} — {int(numeric)} %")
+        self._recompute_global_progress()
+
+    def _recompute_global_progress(self) -> None:
+        if not self.disk_progress:
+            self.update_progress(0)
+            return
+        avg = sum(self.disk_progress.values()) / len(self.disk_progress)
+        self.update_progress(avg)
+
     def update_progress(self, value: float) -> None:
         try:
-            self.progress_var.set(value)
+            numeric = max(0.0, min(100.0, float(value)))
+
+            if hasattr(self, '_progress_stats_var') and 'terminé' not in self._progress_stats_var.get().lower():
+                self._progress_stats_var.set(f"Progression interne : {int(numeric)} %")
             self.root.update_idletasks()
         except (tk.TclError, ValueError, TypeError) as e:
-            self.update_gui_log(f"Error updating progress bar: {str(e)}")
-            log_error(f"Error updating progress bar: {str(e)}")
+            self.update_gui_log(f"Erreur lors de la mise à jour de l'état de progression : {str(e)}")
+            log_error(f"Erreur lors de la mise à jour de l'état de progression : {str(e)}")
 
     def update_gui_log(self, message: str) -> None:
-        """Update the GUI log window with a message (for display only)."""
         try:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
             self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
             self.log_text.see(tk.END)
         except (tk.TclError, ValueError, TypeError, OSError) as e:
             try:
-                log_error(f"Error updating GUI log: {str(e)}")
+                log_error(f"Erreur lors de la mise à jour du journal GUI : {str(e)}")
             except (IOError, OSError):
                 pass
 
-# ── Point d'entrée ─────────────────────────────────────────────────────────────
+
 def run_gui_mode() -> None:
-    """Run the GUI version"""
     try:
         root = tk.Tk()
         DiskEraserGUI(root)
         root.mainloop()
     except tk.TclError as e:
-        print(f"GUI initialization error: {str(e)}")
-        log_error(f"GUI initialization error: {str(e)}")
+        print(f"Erreur d'initialisation de l'interface graphique : {str(e)}")
+        log_error(f"Erreur d'initialisation de l'interface graphique : {str(e)}")
         sys.exit(1)
     except (ImportError, ModuleNotFoundError) as e:
-        print(f"Required GUI library not available: {str(e)}")
-        log_error(f"Required GUI library not available: {str(e)}")
+        print(f"Bibliothèque GUI requise indisponible : {str(e)}")
+        log_error(f"Bibliothèque GUI requise indisponible : {str(e)}")
         sys.exit(1)
     except MemoryError:
-        print("Insufficient memory to start GUI")
-        log_error("Insufficient memory to start GUI")
+        print('Mémoire insuffisante pour démarrer l’interface graphique')
+        log_error('Mémoire insuffisante pour démarrer l’interface graphique')
         sys.exit(1)
     except OSError as e:
-        print(f"System error starting GUI: {str(e)}")
-        log_error(f"System error starting GUI: {str(e)}")
+        print(f"Erreur système au démarrage de l'interface graphique : {str(e)}")
+        log_error(f"Erreur système au démarrage de l'interface graphique : {str(e)}")
         sys.exit(1)

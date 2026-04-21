@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║  forgeIso32.sh – ISO live 32-bit Disk Eraser                               ║
+# ║  forgeIso32.sh – ISO live 32-bit e-Broyeur                                 ║
 # ║                                                                             ║
 # ║  Mode unique : Live OpenBox kiosque  (code/)                               ║
 # ║  Architecture : i386 / Debian bullseye                                     ║
@@ -9,7 +9,7 @@
 set -e
 
 # ── Variables ──────────────────────────────────────────────────────────────────
-ISO_NAME="$(pwd)/diskEraser-v6.0-32bits.iso"
+ISO_NAME="$(pwd)/e-Broyeur-v7.0-32bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
 CODE_DIR="$(pwd)/../../code"
 
@@ -160,11 +160,11 @@ mkdir -p config/includes.chroot/usr/local/bin/
 cp -r "${CODE_DIR}"/* config/includes.chroot/usr/local/bin/ 2>/dev/null || true
 chmod +x config/includes.chroot/usr/local/bin/*.py 2>/dev/null || true
 
-cat << 'WRAPPER' > config/includes.chroot/usr/local/bin/de
+cat << 'WRAPPER' > config/includes.chroot/usr/local/bin/broyeur
 #!/bin/bash
 exec python3 /usr/local/bin/main.py "$@"
 WRAPPER
-chmod +x config/includes.chroot/usr/local/bin/de
+chmod +x config/includes.chroot/usr/local/bin/broyeur
 
 # ── Sudo sans mot de passe ─────────────────────────────────────────────────────
 mkdir -p config/includes.chroot/etc/sudoers.d/
@@ -191,35 +191,32 @@ cat << 'EOF' > config/includes.chroot/etc/xdg/openbox/rc.xml
 <openbox_config xmlns="http://openbox.org/3.4/rc"
                 xmlns:xi="http://www.w3.org/2001/XInclude">
   <applications>
-    <application class="*">
-      <fullscreen>yes</fullscreen>
-      <decor>no</decor>
-      <maximized>yes</maximized>
-      <layer>above</layer>
-    </application>
+    <!-- Pas de fullscreen/maximized global : la fenetre principale gere
+         elle-meme son plein ecran ; les fenetres secondaires (pop-ups)
+         conservent ainsi leur taille naturelle. -->
   </applications>
 </openbox_config>
 EOF
 
 # Script de session : live uniquement, pas de branche installer
-cat << 'EOF' > config/includes.chroot/usr/local/bin/de-session.sh
+cat << 'EOF' > config/includes.chroot/usr/local/bin/broyeur-session.sh
 #!/bin/bash
 xset s off -dpms 2>/dev/null || true
 xset s noblank   2>/dev/null || true
 openbox &
 WM_PID=$!
 sleep 1
-sudo /usr/local/bin/de
+sudo /usr/local/bin/broyeur
 kill "$WM_PID" 2>/dev/null || true
 EOF
-chmod +x config/includes.chroot/usr/local/bin/de-session.sh
+chmod +x config/includes.chroot/usr/local/bin/broyeur-session.sh
 
 mkdir -p config/includes.chroot/usr/share/xsessions/
-cat << 'EOF' > config/includes.chroot/usr/share/xsessions/disk-eraser-kiosk.desktop
+cat << 'EOF' > config/includes.chroot/usr/share/xsessions/e-Broyeur-kiosk.desktop
 [Desktop Entry]
-Name=Disk Eraser (Kiosk)
+Name=e-Broyeur (Kiosk)
 Comment=Borne de blanchiment plein écran
-Exec=/usr/local/bin/de-session.sh
+Exec=/usr/local/bin/broyeur-session.sh
 Type=Application
 EOF
 
@@ -227,20 +224,20 @@ mkdir -p config/includes.chroot/etc/lightdm/lightdm.conf.d/
 cat << 'EOF' > config/includes.chroot/etc/lightdm/lightdm.conf.d/50-autologin.conf
 [Seat:*]
 autologin-user=user
-autologin-session=disk-eraser-kiosk
+autologin-session=e-Broyeur-kiosk
 autologin-user-timeout=0
 EOF
 
 mkdir -p config/includes.chroot/etc/skel/
 cat << 'EOF' > config/includes.chroot/etc/skel/.dmrc
 [Desktop]
-Session=disk-eraser-kiosk
+Session=e-Broyeur-kiosk
 EOF
 
 cat << 'EOF' > config/includes.chroot/etc/skel/.bashrc
 if [ -f /etc/bashrc ]; then . /etc/bashrc; fi
-echo "Borne de blanchiment Disk Eraser (32-bit)"
-echo "Type 'sudo de' to use the program"
+echo "Borne de blanchiment e-Broyeur (32-bit)"
+echo "Type 'sudo broyeur' to use the program"
 EOF
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -255,7 +252,7 @@ DEFAULT live
 TIMEOUT 100
 PROMPT 0
 
-MENU TITLE Disk Eraser v7.0 (32-bit) - Mode Live
+MENU TITLE e-Broyeur v7.0 (32-bit) - Mode Live
 
 LABEL live
   MENU LABEL > Demarrer (mode live)

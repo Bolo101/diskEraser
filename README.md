@@ -237,9 +237,30 @@ project/
 │   ├── log_handler.py      # Fonctionnalité de journalisation
 │   ├── main.py             # Logique principale du programme
 │   └── utils.py            # Fonctions utilitaires
-├── iso/                    # Ressources de création de l’ISO
-│   ├── forgeIsoPy.sh       # Générateur d’ISO
-│   └── makefile            # Automatisation du build
+├── code_installer
+│   ├── admin_interface.py  # Administration pannel
+│   ├── cli_interface.py
+│   ├── config_manager.py
+│   ├── disk_erase.py
+│   ├── disk_format.py
+│   ├── disk_operations.py
+│   ├── disk_partition.py
+│   ├── export_manager.py
+│   ├── gui_interface.py
+│   ├── log_handler.py
+│   ├── main.py
+│   ├── stats_manager.py
+│   └── utils.py
+├── img
+│   ├── background
+│   ├── gui_installer.png
+│   └── gui.png
+├── iso
+│   ├── iso-32-bits
+│   │   └── forgeIso32.sh  # Générateur d’ISO
+│   ├── iso-64-bits        # Automatisation du build
+│   │   └── forgeIso64.sh  # Générateur d’ISO
+│   └── makefile
 ├── setup.sh                # Installateur de dépendances
 └── LICENSE                 # Licence CC 4.0
 ```

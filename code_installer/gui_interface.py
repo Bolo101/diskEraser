@@ -426,12 +426,11 @@ class DiskEraserGUI:
 
         self._divider(inner)
 
-        self._section_label(inner, 'Table de partitions',
-                            subtitle='Appliquée lors du partitionnement')
+        self._section_label(inner, 'Table de partitions')
 
         pt_frame = tk.Frame(inner, bg=self._SURFACE)
         pt_frame.pack(fill=tk.X)
-        for rb_text, rb_val in [("MBR (compatible)", "mbr"), ("GPT (moderne)", "gpt")]:
+        for rb_text, rb_val in [("MBR (Universel)", "mbr"), ("GPT (moderne)", "gpt")]:
             tk.Radiobutton(
                 pt_frame,
                 text=rb_text,
@@ -449,8 +448,7 @@ class DiskEraserGUI:
 
         self._divider(inner)
 
-        self._section_label(inner, 'Libellé après formatage',
-                            subtitle='Conservé/défini sur la nouvelle partition')
+        self._section_label(inner, 'Libellé après formatage')
 
         label_mode_frame = tk.Frame(inner, bg=self._SURFACE)
         label_mode_frame.pack(fill=tk.X)

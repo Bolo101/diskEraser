@@ -19,6 +19,22 @@ def run_command(command_list: list[str]) -> str:
         print("\nOperation interrupted by user (Ctrl+C)")
         sys.exit(130)  # Standard exit code for SIGINT
 
+def get_disk_filesystem(device: str) -> str:
+    """
+    Détecte le système de fichiers de la première partition d'un disque via lsblk.
+    Retourne le type (ex. 'ext4', 'ntfs', 'vfat') ou '—' si non détecté.
+    """
+    try:
+        output = run_command(["lsblk", "-o", "FSTYPE", "-n", f"/dev/{device}"])
+        if output:
+            fstypes = [line.strip() for line in output.split('\n') if line.strip()]
+            if fstypes:
+                return fstypes[0]
+        return "—"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "—"
+
+
 def get_disk_label(device: str) -> str:
     """
     Get the label of a disk device using lsblk.
@@ -99,12 +115,16 @@ def get_disk_list() -> list[dict]:
                 
                 # Get disk label
                 label = get_disk_label(device)
-                
+
+                # Get filesystem type (from first partition)
+                filesystem = get_disk_filesystem(device)
+
                 disks.append({
                     "device": f"/dev/{device}",
                     "size": size,
                     "model": model,
-                    "label": label
+                    "label": label,
+                    "filesystem": filesystem,
                 })
         return disks
     except FileNotFoundError as e:

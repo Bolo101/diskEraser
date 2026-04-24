@@ -22,6 +22,7 @@ from log_handler import (
 from admin_interface import open_admin_panel
 from stats_manager import get_wipe_count
 from disk_operations import get_active_disk, process_disk
+from config_manager import get_passes
 
 
 class DiskEraserGUI:
@@ -56,9 +57,12 @@ class DiskEraserGUI:
 
         self.disk_vars: Dict[str, tk.BooleanVar] = {}
         self.filesystem_var = tk.StringVar(value="ext4")
-        self.passes_var = tk.StringVar(value="5")
+        self.passes_var = tk.StringVar(value=str(get_passes()))
         self.erase_method_var = tk.StringVar(value="overwrite")
         self.crypto_fill_var = tk.StringVar(value="random")
+        self.label_mode_var = tk.StringVar(value="none")   # "none" | "preserve" | "custom"
+        self.custom_label_var = tk.StringVar(value="")
+        self.partition_table_var = tk.StringVar(value="mbr")  # "mbr" | "gpt"
         self.disks: List[Dict[str, str]] = []
         self.disk_progress: Dict[str, float] = {}
         self.active_disk = get_active_disk()
@@ -373,7 +377,10 @@ class DiskEraserGUI:
         self.passes_frame.pack(fill=tk.X, pady=(8, 0))
         tk.Label(self.passes_frame, text='Nombre de passes :', bg=self._SURFACE,
                  fg=self._TEXT_DIM, font=('Segoe UI', 10)).pack(side=tk.LEFT)
-        ttk.Entry(self.passes_frame, textvariable=self.passes_var, width=6).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Entry(self.passes_frame, textvariable=self.passes_var, width=6,
+                  state='readonly').pack(side=tk.LEFT, padx=(8, 0))
+        tk.Label(self.passes_frame, text='(admin)', bg=self._SURFACE,
+                 fg=self._TEXT_FAINT, font=('Segoe UI', 8, 'italic')).pack(side=tk.LEFT, padx=(6, 0))
 
         self._divider(inner)
 
@@ -416,6 +423,66 @@ class DiskEraserGUI:
                 bd=0,
                 highlightthickness=0,
             ).pack(side=tk.LEFT, padx=(0, 10))
+
+        self._divider(inner)
+
+        self._section_label(inner, 'Table de partitions',
+                            subtitle='Appliquée lors du partitionnement')
+
+        pt_frame = tk.Frame(inner, bg=self._SURFACE)
+        pt_frame.pack(fill=tk.X)
+        for rb_text, rb_val in [("MBR (compatible)", "mbr"), ("GPT (moderne)", "gpt")]:
+            tk.Radiobutton(
+                pt_frame,
+                text=rb_text,
+                value=rb_val,
+                variable=self.partition_table_var,
+                bg=self._SURFACE,
+                fg=self._TEXT,
+                selectcolor=self._BG_ELEVATED,
+                activebackground=self._SURFACE,
+                activeforeground=self._ACCENT2,
+                font=('Segoe UI', 10),
+                bd=0,
+                highlightthickness=0,
+            ).pack(side=tk.LEFT, padx=(4, 16), pady=2)
+
+        self._divider(inner)
+
+        self._section_label(inner, 'Libellé après formatage',
+                            subtitle='Conservé/défini sur la nouvelle partition')
+
+        label_mode_frame = tk.Frame(inner, bg=self._SURFACE)
+        label_mode_frame.pack(fill=tk.X)
+
+        for rb_text, rb_val in [
+            ("Aucun libellé",            "none"),
+            ("Conserver le libellé actuel", "preserve"),
+            ("Nouveau libellé :",        "custom"),
+        ]:
+            tk.Radiobutton(
+                label_mode_frame,
+                text=rb_text,
+                value=rb_val,
+                variable=self.label_mode_var,
+                command=self._update_label_options,
+                bg=self._SURFACE,
+                fg=self._TEXT,
+                selectcolor=self._BG_ELEVATED,
+                activebackground=self._SURFACE,
+                activeforeground=self._ACCENT2,
+                font=('Segoe UI', 10),
+                bd=0,
+                highlightthickness=0,
+            ).pack(anchor='w', padx=4, pady=1)
+
+        self._custom_label_entry = ttk.Entry(
+            label_mode_frame,
+            textvariable=self.custom_label_var,
+            width=20,
+            state='disabled',
+        )
+        self._custom_label_entry.pack(anchor='w', padx=24, pady=(0, 4))
 
         self._divider(inner)
 
@@ -502,7 +569,8 @@ class DiskEraserGUI:
         )
 
         id_text = f"{disk_identifier}{ssd_indicator}{active_indicator}{label_indicator}"
-        details_text = f"Taille : {disk['size']}  •  Modèle : {disk['model']}"
+        fs_str = disk.get('filesystem', '—')
+        details_text = f"Taille : {disk['size']}  •  FS : {fs_str}  •  Modèle : {disk['model']}"
         text_color = 'red' if is_active else ('blue' if '(SSD)' in ssd_indicator else 'black')
         return id_text, details_text, text_color, is_active
 
@@ -758,9 +826,18 @@ class DiskEraserGUI:
         for child in self.passes_frame.winfo_children():
             if isinstance(child, ttk.Entry):
                 try:
-                    child.configure(state='disabled' if method == 'crypto' else 'normal')
+                    # Le champ passes reste toujours en lecture seule (admin uniquement)
+                    child.configure(state='readonly')
                 except tk.TclError:
                     pass
+
+    def _update_label_options(self) -> None:
+        """Active/désactive le champ libellé personnalisé selon le mode sélectionné."""
+        state = 'normal' if self.label_mode_var.get() == 'custom' else 'disabled'
+        try:
+            self._custom_label_entry.configure(state=state)
+        except tk.TclError:
+            pass
 
     def format_only(self) -> None:
         selected_disks = [disk for disk, var in self.disk_vars.items() if var.get()]
@@ -806,8 +883,16 @@ class DiskEraserGUI:
         self._progress_detail_var.set('Préparation des tâches de formatage')
         self._progress_stats_var.set(f"{len(selected_disks)} disque{'s' if len(selected_disks) > 1 else ''}")
         self.update_progress(0)
+
+        # ── Résolution des libellés AVANT de lancer le thread ──
+        disk_labels = self._resolve_labels(selected_disks)
+
         try:
-            threading.Thread(target=self.format_disks_thread, args=(selected_disks, fs_choice), daemon=True).start()
+            threading.Thread(
+                target=self.format_disks_thread,
+                args=(selected_disks, fs_choice, disk_labels, self.partition_table_var.get()),
+                daemon=True,
+            ).start()
         except (RuntimeError, OSError) as e:
             error_msg = f"Erreur lors du démarrage du thread de formatage : {str(e)}"
             messagebox.showerror('Erreur de thread', error_msg)
@@ -815,7 +900,7 @@ class DiskEraserGUI:
             log_error(error_msg)
             self._set_status('Prêt', 'idle')
 
-    def format_disks_thread(self, disks, fs_choice):
+    def format_disks_thread(self, disks, fs_choice, disk_labels=None, partition_table="mbr"):
         start_msg = f"Démarrage du formatage de {len(disks)} disque(s) en {fs_choice}"
         self.update_gui_log(start_msg)
         log_info(start_msg)
@@ -823,7 +908,16 @@ class DiskEraserGUI:
         completed_disks = 0
         try:
             with ThreadPoolExecutor() as executor:
-                futures = {executor.submit(self.format_single_disk, disk, fs_choice): disk for disk in disks}
+                futures = {
+                    executor.submit(
+                        self.format_single_disk,
+                        disk,
+                        fs_choice,
+                        (disk_labels or {}).get(disk),
+                        partition_table,
+                    ): disk
+                    for disk in disks
+                }
                 for future in as_completed(futures):
                     disk = futures[future]
                     try:
@@ -851,7 +945,7 @@ class DiskEraserGUI:
         except tk.TclError as e:
             self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
 
-    def format_single_disk(self, disk, fs_choice):
+    def format_single_disk(self, disk, fs_choice, label=None, partition_table="mbr"):
         disk_name = disk.replace('/dev/', '')
         try:
             disk_id = get_disk_serial(disk_name)
@@ -864,11 +958,12 @@ class DiskEraserGUI:
             self._progress_detail_var.set(f"Formatage de {disk_name}")
             log_info(f"Formatting {disk_name} as {fs_choice}")
         try:
-            partition_disk(disk_name)
-            self.update_gui_log(f"Partitionnement de {disk_name} effectué")
-            format_disk(disk_name, fs_choice)
-            self.update_gui_log(f"{disk_name} formaté avec succès en {fs_choice}")
-            log_info(f"Successfully formatted {disk_name} as {fs_choice}")
+            partition_disk(disk_name, partition_table=partition_table)
+            self.update_gui_log(f"Partitionnement de {disk_name} effectué ({partition_table.upper()})")
+            format_disk(disk_name, fs_choice, label=label)
+            label_info = f" (libellé : '{label}')" if label else ""
+            self.update_gui_log(f"{disk_name} formaté avec succès en {fs_choice}{label_info}")
+            log_info(f"Successfully formatted {disk_name} as {fs_choice}{label_info}")
         except (CalledProcessError, FileNotFoundError, PermissionError, IOError, OSError,
                 MemoryError, ValueError, TypeError, RuntimeError) as e:
             error_msg = f"Erreur lors du formatage de {disk_name} : {str(e)}"
@@ -1137,6 +1232,11 @@ class DiskEraserGUI:
     def _open_admin(self) -> None:
         open_admin_panel(self.root)
         self._update_wipe_counter()
+        # Rafraîchit le nombre de passes au cas où l'admin l'aurait modifié
+        try:
+            self.passes_var.set(str(get_passes()))
+        except Exception:
+            pass
 
     def _block_close(self) -> None:
         messagebox.showinfo(
@@ -1151,6 +1251,38 @@ class DiskEraserGUI:
         except tk.TclError as e:
             self.update_gui_log(f"Erreur lors du basculement en plein écran : {str(e)}")
             log_error(f"Erreur lors du basculement en plein écran : {str(e)}")
+
+    def _resolve_labels(self, selected_disks: List[str]) -> Dict[str, str]:
+        """
+        Construit le dictionnaire {device: label} selon le mode choisi par l'opérateur.
+        Doit être appelé dans le thread principal avant tout lancement de thread.
+        """
+        from utils import get_disk_label as _get_label
+        mode = self.label_mode_var.get()
+        disk_labels: Dict[str, str] = {}
+
+        if mode == "preserve":
+            for disk in selected_disks:
+                disk_name = disk.replace('/dev/', '')
+                try:
+                    lbl = _get_label(disk_name)
+                    lbl = lbl if lbl not in ("No Label", "Unknown", "") else None
+                    disk_labels[disk] = lbl
+                    if lbl:
+                        self.update_gui_log(f"Libellé conservé pour {disk_name} : '{lbl}'")
+                except Exception:
+                    disk_labels[disk] = None
+
+        elif mode == "custom":
+            custom = self.custom_label_var.get().strip()
+            for disk in selected_disks:
+                disk_labels[disk] = custom if custom else None
+
+        else:  # "none"
+            for disk in selected_disks:
+                disk_labels[disk] = None
+
+        return disk_labels
 
     def start_erasure(self) -> None:
         selected_disks = [disk for disk, var in self.disk_vars.items() if var.get()]
@@ -1241,6 +1373,9 @@ class DiskEraserGUI:
                 messagebox.showerror('Erreur', 'Le nombre de passes doit être un entier valide.')
                 return
 
+        # ── Résolution des libellés AVANT de lancer le thread ──
+        disk_labels = self._resolve_labels(selected_disks)
+
         self._erasing_devs = set(selected_disks)
         self.disk_progress = {disk: 0.0 for disk in selected_disks}
         self._progress_phase_var.set('Effacement en cours')
@@ -1252,7 +1387,8 @@ class DiskEraserGUI:
         try:
             threading.Thread(
                 target=self.progress_state,
-                args=(selected_disks, self.filesystem_var.get(), passes, erase_method),
+                args=(selected_disks, self.filesystem_var.get(), passes, erase_method,
+                      disk_labels, self.partition_table_var.get()),
                 daemon=True,
             ).start()
         except (RuntimeError, OSError) as e:
@@ -1263,7 +1399,9 @@ class DiskEraserGUI:
             self._erasing_devs.clear()
             self._set_status('Prêt', 'idle')
 
-    def progress_state(self, disks: List[str], fs_choice: str, passes: int, erase_method: str) -> None:
+    def progress_state(self, disks: List[str], fs_choice: str, passes: int,
+                       erase_method: str, disk_labels: Dict[str, str] = None,
+                       partition_table: str = "mbr") -> None:
         if erase_method == 'crypto':
             fill_method = self.crypto_fill_var.get()
             method_str = f"effacement cryptographique avec remplissage {fill_method}"
@@ -1282,7 +1420,12 @@ class DiskEraserGUI:
         try:
             with ThreadPoolExecutor() as executor:
                 futures = {
-                    executor.submit(self.process_disk_wrapper, disk, fs_choice, passes, erase_method): disk
+                    executor.submit(
+                        self.process_disk_wrapper,
+                        disk, fs_choice, passes, erase_method,
+                        (disk_labels or {}).get(disk),
+                        partition_table,
+                    ): disk
                     for disk in disks
                 }
                 for future in as_completed(futures):
@@ -1322,7 +1465,9 @@ class DiskEraserGUI:
         except tk.TclError as e:
             self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
 
-    def process_disk_wrapper(self, disk: str, fs_choice: str, passes: int, erase_method: str) -> None:
+    def process_disk_wrapper(self, disk: str, fs_choice: str, passes: int,
+                             erase_method: str, label: str = None,
+                             partition_table: str = "mbr") -> None:
         disk_name = disk.replace('/dev/', '')
         try:
             disk_id = get_disk_serial(disk_name)
@@ -1336,19 +1481,17 @@ class DiskEraserGUI:
         try:
             use_crypto = erase_method == 'crypto'
             crypto_fill = self.crypto_fill_var.get() if use_crypto else 'random'
-            try:
-                process_disk(
-                    disk_name,
-                    fs_choice,
-                    passes,
-                    use_crypto,
-                    crypto_fill,
-                    log_func=self.update_gui_log,
-                    progress_callback=lambda value, d=disk: self.update_individual_progress(d, value),
-                )
-            except TypeError:
-                process_disk(disk_name, fs_choice, passes, use_crypto, crypto_fill, log_func=self.update_gui_log)
-                self.update_individual_progress(disk, 100)
+            process_disk(
+                disk_name,
+                fs_choice,
+                passes,
+                use_crypto,
+                crypto_fill,
+                log_func=self.update_gui_log,
+                label=label,
+                progress_callback=lambda value, d=disk: self.update_individual_progress(d, value),
+                partition_table=partition_table,
+            )
         except Exception as e:
             self.update_gui_log(f"Erreur lors du traitement de {disk_name} : {str(e)}")
             raise

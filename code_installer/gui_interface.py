@@ -354,34 +354,43 @@ class DiskEraserGUI:
         inner.pack(fill=tk.BOTH, expand=True)
 
         # ── Méthode d'effacement ──────────────────────────────────────────────
-        meth_row = tk.Frame(inner, bg=self._SURFACE)
-        meth_row.pack(fill=tk.X, pady=(0, 2))
-        tk.Label(meth_row, text="Méthode d'effacement", bg=self._SURFACE,
-                 fg=self._TEXT, font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT)
-        tk.Label(meth_row, text='(admin)', bg=self._SURFACE,
-                 fg=self._TEXT_FAINT, font=('Segoe UI', 7, 'italic')).pack(side=tk.RIGHT)
-        ttk.Entry(meth_row, textvariable=self.passes_var, width=4,
-                  state='readonly').pack(side=tk.RIGHT, padx=(0, 3))
-        tk.Label(meth_row, text='Passes :', bg=self._SURFACE,
-                 fg=self._TEXT_DIM, font=('Segoe UI', 9)).pack(side=tk.RIGHT, padx=(0, 2))
+        tk.Label(inner, text="Méthode d'effacement", bg=self._SURFACE,
+                 fg=self._TEXT, font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 2))
 
-        erase_row = tk.Frame(inner, bg=self._SURFACE)
-        erase_row.pack(fill=tk.X)
-        for txt, val in [("Écrasement standard", "overwrite"),
-                         ("Cryptographique", "crypto")]:
-            tk.Radiobutton(
-                erase_row, text=txt, value=val,
-                variable=self.erase_method_var,
-                command=self.update_method_options,
-                bg=self._SURFACE, fg=self._TEXT,
-                selectcolor=self._BG_ELEVATED,
-                activebackground=self._SURFACE,
-                activeforeground=self._ACCENT2,
-                font=('Segoe UI', 9), bd=0, highlightthickness=0,
-            ).pack(side=tk.LEFT, padx=(0, 12))
+        # Écrasement standard avec passes inline
+        overwrite_row = tk.Frame(inner, bg=self._SURFACE)
+        overwrite_row.pack(fill=tk.X)
+        tk.Radiobutton(
+            overwrite_row, text='Écrasement standard', value='overwrite',
+            variable=self.erase_method_var,
+            command=self.update_method_options,
+            bg=self._SURFACE, fg=self._TEXT,
+            selectcolor=self._BG_ELEVATED,
+            activebackground=self._SURFACE,
+            activeforeground=self._ACCENT2,
+            font=('Segoe UI', 9), bd=0, highlightthickness=0,
+        ).pack(side=tk.LEFT)
+        ttk.Entry(overwrite_row, textvariable=self.passes_var, width=4,
+                  state='readonly').pack(side=tk.LEFT, padx=(8, 2))
+        tk.Label(overwrite_row, text='passes', bg=self._SURFACE,
+                 fg=self._TEXT_DIM, font=('Segoe UI', 9)).pack(side=tk.LEFT)
+        tk.Label(overwrite_row, text='(admin)', bg=self._SURFACE,
+                 fg=self._TEXT_FAINT, font=('Segoe UI', 7, 'italic')).pack(side=tk.LEFT, padx=(4, 0))
+
+        # Cryptographique
+        tk.Radiobutton(
+            inner, text='Effacement cryptographique', value='crypto',
+            variable=self.erase_method_var,
+            command=self.update_method_options,
+            bg=self._SURFACE, fg=self._TEXT,
+            selectcolor=self._BG_ELEVATED,
+            activebackground=self._SURFACE,
+            activeforeground=self._ACCENT2,
+            font=('Segoe UI', 9), bd=0, highlightthickness=0,
+        ).pack(anchor='w', pady=(2, 0))
 
         # passes_frame kept as alias for update_method_options compatibility
-        self.passes_frame = erase_row
+        self.passes_frame = overwrite_row
 
         self._divider(inner, pady=6)
 
@@ -453,11 +462,9 @@ class DiskEraserGUI:
         label_mode_frame = tk.Frame(inner, bg=self._SURFACE)
         label_mode_frame.pack(fill=tk.X)
 
-        lbl_top = tk.Frame(label_mode_frame, bg=self._SURFACE)
-        lbl_top.pack(fill=tk.X)
-        for rb_text, rb_val in [("Aucun", "none"), ("Conserver", "preserve")]:
+        for rb_text, rb_val in [("Aucun libellé", "none"), ("Conserver le libellé actuel", "preserve")]:
             tk.Radiobutton(
-                lbl_top, text=rb_text, value=rb_val,
+                label_mode_frame, text=rb_text, value=rb_val,
                 variable=self.label_mode_var,
                 command=self._update_label_options,
                 bg=self._SURFACE, fg=self._TEXT,
@@ -465,12 +472,12 @@ class DiskEraserGUI:
                 activebackground=self._SURFACE,
                 activeforeground=self._ACCENT2,
                 font=('Segoe UI', 9), bd=0, highlightthickness=0,
-            ).pack(side=tk.LEFT, padx=(0, 12))
+            ).pack(anchor='w', padx=4, pady=1)
 
-        lbl_bottom = tk.Frame(label_mode_frame, bg=self._SURFACE)
-        lbl_bottom.pack(fill=tk.X, pady=(2, 0))
+        lbl_custom_row = tk.Frame(label_mode_frame, bg=self._SURFACE)
+        lbl_custom_row.pack(fill=tk.X, pady=(1, 0))
         tk.Radiobutton(
-            lbl_bottom, text='Nouveau :', value='custom',
+            lbl_custom_row, text='Nouveau libellé :', value='custom',
             variable=self.label_mode_var,
             command=self._update_label_options,
             bg=self._SURFACE, fg=self._TEXT,
@@ -478,10 +485,10 @@ class DiskEraserGUI:
             activebackground=self._SURFACE,
             activeforeground=self._ACCENT2,
             font=('Segoe UI', 9), bd=0, highlightthickness=0,
-        ).pack(side=tk.LEFT)
+        ).pack(side=tk.LEFT, padx=(4, 0))
         self._custom_label_entry = ttk.Entry(
-            lbl_bottom, textvariable=self.custom_label_var,
-            width=16, state='disabled',
+            lbl_custom_row, textvariable=self.custom_label_var,
+            width=14, state='disabled',
         )
         self._custom_label_entry.pack(side=tk.LEFT, padx=(4, 0))
 

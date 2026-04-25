@@ -60,9 +60,9 @@ class DiskEraserGUI:
         self.passes_var = tk.StringVar(value=str(get_passes()))
         self.erase_method_var = tk.StringVar(value="overwrite")
         self.crypto_fill_var = tk.StringVar(value="random")
-        self.label_mode_var = tk.StringVar(value="none")   # "none" | "preserve" | "custom"
+        self.label_mode_var = tk.StringVar(value="none")  # "none"|"preserve"|"custom"
         self.custom_label_var = tk.StringVar(value="")
-        self.partition_table_var = tk.StringVar(value="mbr")  # "mbr" | "gpt"
+        self.partition_table_var = tk.StringVar(value="mbr")  # "mbr"|"gpt"
         self.disks: List[Dict[str, str]] = []
         self.disk_progress: Dict[str, float] = {}
         self.active_disk = get_active_disk()
@@ -350,148 +350,152 @@ class DiskEraserGUI:
         log_sb.pack(side=tk.RIGHT, fill=tk.Y)
 
         opt_card = self._make_card(right_col, expand=True)
-        inner = tk.Frame(opt_card, bg=self._SURFACE, padx=16, pady=14)
+        inner = tk.Frame(opt_card, bg=self._SURFACE, padx=14, pady=8)
         inner.pack(fill=tk.BOTH, expand=True)
 
+        # ── Méthode d'effacement ──────────────────────────────────────────────
+        meth_row = tk.Frame(inner, bg=self._SURFACE)
+        meth_row.pack(fill=tk.X, pady=(0, 2))
+        tk.Label(meth_row, text="Méthode d'effacement", bg=self._SURFACE,
+                 fg=self._TEXT, font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT)
+        tk.Label(meth_row, text='(admin)', bg=self._SURFACE,
+                 fg=self._TEXT_FAINT, font=('Segoe UI', 7, 'italic')).pack(side=tk.RIGHT)
+        ttk.Entry(meth_row, textvariable=self.passes_var, width=4,
+                  state='readonly').pack(side=tk.RIGHT, padx=(0, 3))
+        tk.Label(meth_row, text='Passes :', bg=self._SURFACE,
+                 fg=self._TEXT_DIM, font=('Segoe UI', 9)).pack(side=tk.RIGHT, padx=(0, 2))
 
-        self._section_label(inner, "Méthode d’effacement")
+        erase_row = tk.Frame(inner, bg=self._SURFACE)
+        erase_row.pack(fill=tk.X)
         for txt, val in [("Écrasement standard", "overwrite"),
-                         ("Effacement cryptographique", "crypto")]:
+                         ("Cryptographique", "crypto")]:
             tk.Radiobutton(
-                inner,
-                text=txt,
-                value=val,
+                erase_row, text=txt, value=val,
                 variable=self.erase_method_var,
                 command=self.update_method_options,
-                bg=self._SURFACE,
-                fg=self._TEXT,
+                bg=self._SURFACE, fg=self._TEXT,
                 selectcolor=self._BG_ELEVATED,
                 activebackground=self._SURFACE,
                 activeforeground=self._ACCENT2,
-                font=('Segoe UI', 10),
-                bd=0,
-                highlightthickness=0,
-            ).pack(anchor='w', padx=4, pady=2)
+                font=('Segoe UI', 9), bd=0, highlightthickness=0,
+            ).pack(side=tk.LEFT, padx=(0, 12))
 
-        self.passes_frame = tk.Frame(inner, bg=self._SURFACE)
-        self.passes_frame.pack(fill=tk.X, pady=(8, 0))
-        tk.Label(self.passes_frame, text='Nombre de passes :', bg=self._SURFACE,
-                 fg=self._TEXT_DIM, font=('Segoe UI', 10)).pack(side=tk.LEFT)
-        ttk.Entry(self.passes_frame, textvariable=self.passes_var, width=6,
-                  state='readonly').pack(side=tk.LEFT, padx=(8, 0))
-        tk.Label(self.passes_frame, text='(admin)', bg=self._SURFACE,
-                 fg=self._TEXT_FAINT, font=('Segoe UI', 8, 'italic')).pack(side=tk.LEFT, padx=(6, 0))
+        # passes_frame kept as alias for update_method_options compatibility
+        self.passes_frame = erase_row
 
-        self._divider(inner)
+        self._divider(inner, pady=6)
 
-        self._section_label(inner, 'Remplissage (mode cryptographique)')
+        # ── Remplissage cryptographique ───────────────────────────────────────
+        tk.Label(inner, text='Remplissage cryptographique', bg=self._SURFACE,
+                 fg=self._TEXT, font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 2))
         self.crypto_fill_frame = tk.Frame(inner, bg=self._SURFACE)
         self.crypto_fill_frame.pack(fill=tk.X)
-        for txt, val in [("Données aléatoires", "random"), ("Zéros", "zero")]:
+        for txt, val in [("Aléatoire", "random"), ("Zéros", "zero")]:
             tk.Radiobutton(
-                self.crypto_fill_frame,
-                text=txt,
-                value=val,
+                self.crypto_fill_frame, text=txt, value=val,
                 variable=self.crypto_fill_var,
-                bg=self._SURFACE,
-                fg=self._TEXT,
+                bg=self._SURFACE, fg=self._TEXT,
                 selectcolor=self._BG_ELEVATED,
                 activebackground=self._SURFACE,
                 activeforeground=self._ACCENT2,
-                font=('Segoe UI', 10),
-                bd=0,
-                highlightthickness=0,
-            ).pack(anchor='w', padx=4, pady=1)
+                font=('Segoe UI', 9), bd=0, highlightthickness=0,
+            ).pack(side=tk.LEFT, padx=(0, 12))
 
-        self._divider(inner)
+        self._divider(inner, pady=6)
 
-        self._section_label(inner, 'Système de fichiers')
-        fs_row = tk.Frame(inner, bg=self._SURFACE)
-        fs_row.pack(fill=tk.X)
+        # ── Système de fichiers + Table de partitions (côte à côte) ──────────
+        fs_pt_row = tk.Frame(inner, bg=self._SURFACE)
+        fs_pt_row.pack(fill=tk.X, pady=(0, 4))
+
+        fs_block = tk.Frame(fs_pt_row, bg=self._SURFACE)
+        fs_block.pack(side=tk.LEFT, fill=tk.Y, expand=True)
+        tk.Label(fs_block, text='Système de fichiers', bg=self._SURFACE,
+                 fg=self._TEXT, font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 2))
+        fs_row = tk.Frame(fs_block, bg=self._SURFACE)
+        fs_row.pack(anchor='w')
         for txt, val in [("ext4", "ext4"), ("NTFS", "ntfs"), ("FAT32", "vfat")]:
             tk.Radiobutton(
-                fs_row,
-                text=txt,
-                value=val,
+                fs_row, text=txt, value=val,
                 variable=self.filesystem_var,
-                bg=self._SURFACE,
-                fg=self._TEXT,
+                bg=self._SURFACE, fg=self._TEXT,
                 selectcolor=self._BG_ELEVATED,
                 activebackground=self._SURFACE,
                 activeforeground=self._ACCENT2,
-                font=('Segoe UI', 10),
-                bd=0,
-                highlightthickness=0,
+                font=('Segoe UI', 9), bd=0, highlightthickness=0,
+            ).pack(side=tk.LEFT, padx=(0, 6))
+
+        tk.Frame(fs_pt_row, bg=self._BORDER_SOFT, width=1).pack(
+            side=tk.LEFT, fill=tk.Y, padx=10, pady=2)
+
+        pt_block = tk.Frame(fs_pt_row, bg=self._SURFACE)
+        pt_block.pack(side=tk.LEFT, fill=tk.Y)
+        tk.Label(pt_block, text='Table de partitions', bg=self._SURFACE,
+                 fg=self._TEXT, font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 2))
+        pt_row = tk.Frame(pt_block, bg=self._SURFACE)
+        pt_row.pack(anchor='w')
+        for rb_text, rb_val in [("MBR", "mbr"), ("GPT", "gpt")]:
+            tk.Radiobutton(
+                pt_row, text=rb_text, value=rb_val,
+                variable=self.partition_table_var,
+                bg=self._SURFACE, fg=self._TEXT,
+                selectcolor=self._BG_ELEVATED,
+                activebackground=self._SURFACE,
+                activeforeground=self._ACCENT2,
+                font=('Segoe UI', 9), bd=0, highlightthickness=0,
             ).pack(side=tk.LEFT, padx=(0, 10))
 
-        self._divider(inner)
+        self._divider(inner, pady=6)
 
-        self._section_label(inner, 'Table de partitions')
-
-        pt_frame = tk.Frame(inner, bg=self._SURFACE)
-        pt_frame.pack(fill=tk.X)
-        for rb_text, rb_val in [("MBR (Universel)", "mbr"), ("GPT (moderne)", "gpt")]:
-            tk.Radiobutton(
-                pt_frame,
-                text=rb_text,
-                value=rb_val,
-                variable=self.partition_table_var,
-                bg=self._SURFACE,
-                fg=self._TEXT,
-                selectcolor=self._BG_ELEVATED,
-                activebackground=self._SURFACE,
-                activeforeground=self._ACCENT2,
-                font=('Segoe UI', 10),
-                bd=0,
-                highlightthickness=0,
-            ).pack(side=tk.LEFT, padx=(4, 16), pady=2)
-
-        self._divider(inner)
-
-        self._section_label(inner, 'Libellé après formatage')
+        # ── Libellé après formatage ───────────────────────────────────────────
+        tk.Label(inner, text='Libellé après formatage', bg=self._SURFACE,
+                 fg=self._TEXT, font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 2))
 
         label_mode_frame = tk.Frame(inner, bg=self._SURFACE)
         label_mode_frame.pack(fill=tk.X)
 
-        for rb_text, rb_val in [
-            ("Aucun libellé",            "none"),
-            ("Conserver le libellé actuel", "preserve"),
-            ("Nouveau libellé :",        "custom"),
-        ]:
+        lbl_top = tk.Frame(label_mode_frame, bg=self._SURFACE)
+        lbl_top.pack(fill=tk.X)
+        for rb_text, rb_val in [("Aucun", "none"), ("Conserver", "preserve")]:
             tk.Radiobutton(
-                label_mode_frame,
-                text=rb_text,
-                value=rb_val,
+                lbl_top, text=rb_text, value=rb_val,
                 variable=self.label_mode_var,
                 command=self._update_label_options,
-                bg=self._SURFACE,
-                fg=self._TEXT,
+                bg=self._SURFACE, fg=self._TEXT,
                 selectcolor=self._BG_ELEVATED,
                 activebackground=self._SURFACE,
                 activeforeground=self._ACCENT2,
-                font=('Segoe UI', 10),
-                bd=0,
-                highlightthickness=0,
-            ).pack(anchor='w', padx=4, pady=1)
+                font=('Segoe UI', 9), bd=0, highlightthickness=0,
+            ).pack(side=tk.LEFT, padx=(0, 12))
 
+        lbl_bottom = tk.Frame(label_mode_frame, bg=self._SURFACE)
+        lbl_bottom.pack(fill=tk.X, pady=(2, 0))
+        tk.Radiobutton(
+            lbl_bottom, text='Nouveau :', value='custom',
+            variable=self.label_mode_var,
+            command=self._update_label_options,
+            bg=self._SURFACE, fg=self._TEXT,
+            selectcolor=self._BG_ELEVATED,
+            activebackground=self._SURFACE,
+            activeforeground=self._ACCENT2,
+            font=('Segoe UI', 9), bd=0, highlightthickness=0,
+        ).pack(side=tk.LEFT)
         self._custom_label_entry = ttk.Entry(
-            label_mode_frame,
-            textvariable=self.custom_label_var,
-            width=20,
-            state='disabled',
+            lbl_bottom, textvariable=self.custom_label_var,
+            width=16, state='disabled',
         )
-        self._custom_label_entry.pack(anchor='w', padx=24, pady=(0, 4))
+        self._custom_label_entry.pack(side=tk.LEFT, padx=(4, 0))
 
-        self._divider(inner)
+        self._divider(inner, pady=6)
 
+        # ── Boutons d'action ──────────────────────────────────────────────────
         self._action_button(
             inner,
-            "▶  DÉMARRER L’EFFACEMENT",
+            "▶  DÉMARRER L'EFFACEMENT",
             self.start_erasure,
             bg='#b3342b',
             hover_bg=self._DANGER,
             accent=True,
-        ).pack(fill=tk.X, pady=(0, 6))
+        ).pack(fill=tk.X, pady=(0, 5))
         self._action_button(
             inner,
             '◻  FORMATER SEULEMENT',
@@ -499,26 +503,20 @@ class DiskEraserGUI:
             bg=self._ACCENT,
             hover_bg=self._ACCENT2,
             accent=True,
-        ).pack(fill=tk.X, pady=(0, 8))
+        ).pack(fill=tk.X, pady=(0, 6))
 
-        self._divider(inner)
+        self._divider(inner, pady=6)
 
         counter_frame = tk.Frame(inner, bg=self._SURFACE)
         counter_frame.pack(fill=tk.X, pady=(0, 4))
         tk.Label(
-            counter_frame,
-            text='Supports blanchis :',
-            bg=self._SURFACE,
-            fg=self._TEXT_DIM,
-            font=('Segoe UI', 9),
+            counter_frame, text='Supports blanchis :',
+            bg=self._SURFACE, fg=self._TEXT_DIM, font=('Segoe UI', 9),
         ).pack(side=tk.LEFT)
         self._wipe_count_var = tk.StringVar(value='—')
         tk.Label(
-            counter_frame,
-            textvariable=self._wipe_count_var,
-            bg=self._SURFACE,
-            fg='#2ecc71',
-            font=('Segoe UI', 9, 'bold'),
+            counter_frame, textvariable=self._wipe_count_var,
+            bg=self._SURFACE, fg='#2ecc71', font=('Segoe UI', 9, 'bold'),
         ).pack(side=tk.LEFT, padx=(6, 0))
 
         ttk.Button(
@@ -821,16 +819,8 @@ class DiskEraserGUI:
                 child.configure(state='normal' if method == 'crypto' else 'disabled')
             except tk.TclError:
                 pass
-        for child in self.passes_frame.winfo_children():
-            if isinstance(child, ttk.Entry):
-                try:
-                    # Le champ passes reste toujours en lecture seule (admin uniquement)
-                    child.configure(state='readonly')
-                except tk.TclError:
-                    pass
 
     def _update_label_options(self) -> None:
-        """Active/désactive le champ libellé personnalisé selon le mode sélectionné."""
         state = 'normal' if self.label_mode_var.get() == 'custom' else 'disabled'
         try:
             self._custom_label_entry.configure(state=state)
@@ -881,10 +871,7 @@ class DiskEraserGUI:
         self._progress_detail_var.set('Préparation des tâches de formatage')
         self._progress_stats_var.set(f"{len(selected_disks)} disque{'s' if len(selected_disks) > 1 else ''}")
         self.update_progress(0)
-
-        # ── Résolution des libellés AVANT de lancer le thread ──
         disk_labels = self._resolve_labels(selected_disks)
-
         try:
             threading.Thread(
                 target=self.format_disks_thread,
@@ -908,11 +895,8 @@ class DiskEraserGUI:
             with ThreadPoolExecutor() as executor:
                 futures = {
                     executor.submit(
-                        self.format_single_disk,
-                        disk,
-                        fs_choice,
-                        (disk_labels or {}).get(disk),
-                        partition_table,
+                        self.format_single_disk, disk, fs_choice,
+                        (disk_labels or {}).get(disk), partition_table,
                     ): disk
                     for disk in disks
                 }
@@ -959,9 +943,8 @@ class DiskEraserGUI:
             partition_disk(disk_name, partition_table=partition_table)
             self.update_gui_log(f"Partitionnement de {disk_name} effectué ({partition_table.upper()})")
             format_disk(disk_name, fs_choice, label=label)
-            label_info = f" (libellé : '{label}')" if label else ""
-            self.update_gui_log(f"{disk_name} formaté avec succès en {fs_choice}{label_info}")
-            log_info(f"Successfully formatted {disk_name} as {fs_choice}{label_info}")
+            self.update_gui_log(f"{disk_name} formaté avec succès en {fs_choice}")
+            log_info(f"Successfully formatted {disk_name} as {fs_choice}")
         except (CalledProcessError, FileNotFoundError, PermissionError, IOError, OSError,
                 MemoryError, ValueError, TypeError, RuntimeError) as e:
             error_msg = f"Erreur lors du formatage de {disk_name} : {str(e)}"
@@ -1230,7 +1213,6 @@ class DiskEraserGUI:
     def _open_admin(self) -> None:
         open_admin_panel(self.root)
         self._update_wipe_counter()
-        # Rafraîchit le nombre de passes au cas où l'admin l'aurait modifié
         try:
             self.passes_var.set(str(get_passes()))
         except Exception:
@@ -1251,14 +1233,9 @@ class DiskEraserGUI:
             log_error(f"Erreur lors du basculement en plein écran : {str(e)}")
 
     def _resolve_labels(self, selected_disks: List[str]) -> Dict[str, str]:
-        """
-        Construit le dictionnaire {device: label} selon le mode choisi par l'opérateur.
-        Doit être appelé dans le thread principal avant tout lancement de thread.
-        """
         from utils import get_disk_label as _get_label
         mode = self.label_mode_var.get()
         disk_labels: Dict[str, str] = {}
-
         if mode == "preserve":
             for disk in selected_disks:
                 disk_name = disk.replace('/dev/', '')
@@ -1270,16 +1247,13 @@ class DiskEraserGUI:
                         self.update_gui_log(f"Libellé conservé pour {disk_name} : '{lbl}'")
                 except Exception:
                     disk_labels[disk] = None
-
         elif mode == "custom":
             custom = self.custom_label_var.get().strip()
             for disk in selected_disks:
                 disk_labels[disk] = custom if custom else None
-
-        else:  # "none"
+        else:
             for disk in selected_disks:
                 disk_labels[disk] = None
-
         return disk_labels
 
     def start_erasure(self) -> None:
@@ -1371,9 +1345,7 @@ class DiskEraserGUI:
                 messagebox.showerror('Erreur', 'Le nombre de passes doit être un entier valide.')
                 return
 
-        # ── Résolution des libellés AVANT de lancer le thread ──
         disk_labels = self._resolve_labels(selected_disks)
-
         self._erasing_devs = set(selected_disks)
         self.disk_progress = {disk: 0.0 for disk in selected_disks}
         self._progress_phase_var.set('Effacement en cours')
@@ -1419,10 +1391,8 @@ class DiskEraserGUI:
             with ThreadPoolExecutor() as executor:
                 futures = {
                     executor.submit(
-                        self.process_disk_wrapper,
-                        disk, fs_choice, passes, erase_method,
-                        (disk_labels or {}).get(disk),
-                        partition_table,
+                        self.process_disk_wrapper, disk, fs_choice, passes, erase_method,
+                        (disk_labels or {}).get(disk), partition_table,
                     ): disk
                     for disk in disks
                 }
@@ -1480,11 +1450,7 @@ class DiskEraserGUI:
             use_crypto = erase_method == 'crypto'
             crypto_fill = self.crypto_fill_var.get() if use_crypto else 'random'
             process_disk(
-                disk_name,
-                fs_choice,
-                passes,
-                use_crypto,
-                crypto_fill,
+                disk_name, fs_choice, passes, use_crypto, crypto_fill,
                 log_func=self.update_gui_log,
                 label=label,
                 progress_callback=lambda value, d=disk: self.update_individual_progress(d, value),

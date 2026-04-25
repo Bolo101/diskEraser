@@ -34,7 +34,7 @@ def partition_disk(disk: str, partition_table: str = "mbr") -> None:
         run_command(["parted", f"/dev/{disk_name}", "--script", "mklabel", table])
 
         # Partition primaire occupant 100% du disque
-        run_command(["parted", f"/dev/{disk_name}", "--script", "mkpart", "primary", "0%", "100%"])
+        run_command(["parted", f"/dev/{disk_name}", "--script", "mkpart", "primary", "1Mib", "100%"])
 
         # Informer le noyau
         run_command(["partprobe", f"/dev/{disk_name}"])

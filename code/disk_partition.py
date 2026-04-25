@@ -1,55 +1,51 @@
 import logging
 from utils import run_command
 import sys
+import time
 from subprocess import CalledProcessError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+
 def get_partition_name(disk_name: str) -> str:
     """
-    Get the correct partition name for a disk.
-    Handles NVMe (nvme0n1 -> nvme0n1p1) and standard disks (sda -> sda1).
+    Retourne le nom de la première partition pour un disque donné.
+    Gère NVMe (nvme0n1 -> nvme0n1p1) et disques standards (sda -> sda1).
     """
-    # Remove /dev/ if present
     disk_name = disk_name.replace('/dev/', '')
-    
-    # Check if it's an NVMe drive
     if 'nvme' in disk_name:
-        # NVMe drives use 'p' before partition number
         return f"{disk_name}p1"
     else:
-        # Standard drives append partition number directly
         return f"{disk_name}1"
 
 
-def partition_disk(disk: str) -> None:
+def partition_disk(disk: str, partition_table: str = "mbr") -> None:
     """
-    Partition disk with proper NVMe support.
+    Partitionne le disque avec la table de partitions choisie.
+    partition_table : "mbr" (msdos) ou "gpt". Défaut : "mbr".
+    Gère correctement les disques NVMe et standards.
     """
-    print(f"Partitioning disk {disk}...")
+    table = "msdos" if partition_table.lower() == "mbr" else "gpt"
+    disk_name = disk.replace('/dev/', '')
+    print(f"Partitionnement de {disk_name} avec table {partition_table.upper()}...")
 
     try:
-        # Make sure we're working with just the device name without /dev/
-        disk_name = disk.replace('/dev/', '')
-        
-        # Create a new GPT partition table
-        run_command(["parted", f"/dev/{disk_name}", "--script", "mklabel", "gpt"])
-        
-        # Create a primary partition using 100% of disk space
+        # Création de la table de partitions
+        run_command(["parted", f"/dev/{disk_name}", "--script", "mklabel", table])
+
+        # Partition primaire occupant 100% du disque
         run_command(["parted", f"/dev/{disk_name}", "--script", "mkpart", "primary", "0%", "100%"])
-        
-        # Inform the kernel of partition table changes
+
+        # Informer le noyau
         run_command(["partprobe", f"/dev/{disk_name}"])
-        
-        # Wait a moment for the partition to be recognized
-        import time
+
         time.sleep(2)
-        
-        print(f"Disk {disk_name} partitioned successfully.")
-        
+
+        print(f"Disque {disk_name} partitionné avec succès ({partition_table.upper()}).")
+
     except FileNotFoundError:
-        logging.error(f"Error: `parted` command not found. Ensure it is installed.")
+        logging.error("Erreur : commande `parted` introuvable.")
         sys.exit(2)
     except CalledProcessError as e:
-        logging.error(f"Error: Failed to partition {disk}: {e}")
+        logging.error(f"Erreur : échec du partitionnement de {disk} : {e}")
         sys.exit(1)

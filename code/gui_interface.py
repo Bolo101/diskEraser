@@ -203,7 +203,7 @@ class DiskEraserGUI:
         top_line.pack(anchor='w')
         tk.Label(top_line, text='e-Broyeur', bg=self._SURFACE, fg=self._TEXT,
                  font=('Segoe UI', 18, 'bold')).pack(side=tk.LEFT)
-        tk.Label(top_line, text=' v7.0', bg=self._SURFACE, fg=self._ACCENT2,
+        tk.Label(top_line, text=' v7.1', bg=self._SURFACE, fg=self._ACCENT2,
                  font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, pady=(5, 0))
         tk.Label(
             left_head,

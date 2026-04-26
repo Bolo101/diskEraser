@@ -1536,7 +1536,7 @@ class DiskEraserGUI:
             except TypeError:
                 process_disk(disk_name, fs_choice, passes, use_crypto, crypto_fill, log_func=self.update_gui_log)
             self.update_individual_progress(disk, 100)
-            log_erase_operation(disk_name, fs_choice, passes, erase_method)
+            log_erase_operation(disk_name, fs_choice, erase_method)
         except Exception as e:
             self.update_gui_log(f"Erreur lors du traitement de {disk_name} : {str(e)}")
             raise

@@ -575,7 +575,13 @@ class DiskEraserGUI:
 
         id_text = f"{disk_identifier}{ssd_indicator}{active_indicator}{label_indicator}"
         fs_str = disk.get('filesystem', '—')
-        details_text = f"Taille : {disk['size']}  •  FS : {fs_str}  •  Modèle : {disk['model']}"
+        partition_table_str = disk.get('partition_table', 'Inconnue')
+        details_text = (
+            f"Taille : {disk['size']} • "
+            f"FS : {fs_str} • "
+            f"Table : {partition_table_str} • "
+            f"Modèle : {disk['model']}"
+        )
         text_color = 'red' if is_active else ('blue' if '(SSD)' in ssd_indicator else 'black')
         return id_text, details_text, text_color, is_active
 

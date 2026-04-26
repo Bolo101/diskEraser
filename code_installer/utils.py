@@ -2,7 +2,9 @@ import subprocess
 import logging
 import sys
 
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 def run_command(command_list: list[str]) -> str:
     try:
@@ -17,7 +19,8 @@ def run_command(command_list: list[str]) -> str:
     except KeyboardInterrupt:
         logging.error("Operation interrupted by user (Ctrl+C)")
         print("\nOperation interrupted by user (Ctrl+C)")
-        sys.exit(130)  # Standard exit code for SIGINT
+        sys.exit(130)
+
 
 def get_disk_filesystem(device: str) -> str:
     """
@@ -35,16 +38,35 @@ def get_disk_filesystem(device: str) -> str:
         return "—"
 
 
+def get_disk_partition_table(device: str) -> str:
+    """
+    Détecte la table de partition d'un disque via lsblk.
+    Retourne 'GPT', 'MBR', 'Aucune' ou 'Inconnue'.
+    """
+    try:
+        output = run_command(["lsblk", "-o", "PTTYPE", "-n", f"/dev/{device}"])
+        if output:
+            pttypes = [line.strip().lower() for line in output.split('\n') if line.strip()]
+            if pttypes:
+                pttype = pttypes[0]
+                if pttype == "gpt":
+                    return "GPT"
+                if pttype in ("dos", "msdos", "mbr"):
+                    return "MBR"
+                return pttype.upper()
+        return "Aucune"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "Inconnue"
+
+
 def get_disk_label(device: str) -> str:
     """
     Get the label of a disk device using lsblk.
     Returns the label or "No Label" if none exists.
     """
     try:
-        # Use lsblk to get label information
         output = run_command(["lsblk", "-o", "LABEL", "-n", f"/dev/{device}"])
         if output and output.strip():
-            # Get the first non-empty label (in case of multiple partitions)
             labels = [line.strip() for line in output.split('\n') if line.strip()]
             if labels:
                 return labels[0]
@@ -52,18 +74,17 @@ def get_disk_label(device: str) -> str:
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "Unknown"
 
+
 def list_disks() -> str:
     """
     Get a raw string output of available disks using lsblk command.
     Returns the output of the lsblk command or an empty string if no disks found.
     """
     try:
-        # Use more explicit column specification with -o option and -n to skip header
         output = run_command(["lsblk", "-d", "-o", "NAME,SIZE,TYPE,MODEL", "-n"])
         if output:
             return output
         else:
-            # Fallback to a simpler command if the first one returned no results
             output = run_command(["lsblk", "-d", "-o", "NAME", "-n"])
             if output:
                 logging.info(output)
@@ -82,42 +103,35 @@ def list_disks() -> str:
         print("\nDisk listing interrupted by user (Ctrl+C)")
         sys.exit(130)
 
+
 def get_disk_list() -> list[dict]:
     """
     Get list of available disks as structured data.
     Returns a list of dictionaries with disk information.
-    Each dictionary contains: 'device', 'size', 'model', and 'label'.
+    Each dictionary contains: 'device', 'size', 'model', 'label',
+    'filesystem' and 'partition_table'.
     """
     try:
-        # Use list_disks function to get raw output
         output = list_disks()
-        
+
         if not output:
             logging.info("No disks found.")
             return []
-        
-        # Parse the output from lsblk command
+
         disks = []
         for line in output.strip().split('\n'):
             if not line.strip():
                 continue
-                
-            # Split the line but preserve the model name which might contain spaces
+
             parts = line.strip().split(maxsplit=3)
             device = parts[0]
-            
-            # Ensure we have at least NAME and SIZE
+
             if len(parts) >= 2:
                 size = parts[1]
-                
-                # MODEL may be missing, set to "Unknown" if it is
                 model = parts[3] if len(parts) > 3 else "Unknown"
-                
-                # Get disk label
                 label = get_disk_label(device)
-
-                # Get filesystem type (from first partition)
                 filesystem = get_disk_filesystem(device)
+                partition_table = get_disk_partition_table(device)
 
                 disks.append({
                     "device": f"/dev/{device}",
@@ -125,6 +139,7 @@ def get_disk_list() -> list[dict]:
                     "model": model,
                     "label": label,
                     "filesystem": filesystem,
+                    "partition_table": partition_table,
                 })
         return disks
     except FileNotFoundError as e:
@@ -139,6 +154,7 @@ def get_disk_list() -> list[dict]:
     except KeyboardInterrupt:
         logging.error("Disk listing interrupted by user")
         return []
+
 
 def choose_filesystem() -> str:
     """
@@ -182,94 +198,82 @@ def get_physical_drives_for_logical_volumes(active_devices: list) -> set:
     """
     if not active_devices:
         return set()
-    
+
     physical_drives = set()
-    
+
     try:
-        # Get all physical drives from disk list
         disk_list = get_disk_list()
         physical_device_names = [disk['device'].replace('/dev/', '') for disk in disk_list]
-        
+
         for physical_device in physical_device_names:
             try:
-                # Use lsblk to get the complete device tree for this physical drive
-                # -o NAME shows device names, -l shows in list format, -n removes headers
                 output = run_command([
-                    "lsblk", 
-                    f"/dev/{physical_device}", 
-                    "-o", "NAME", 
-                    "-l", 
+                    "lsblk",
+                    f"/dev/{physical_device}",
+                    "-o", "NAME",
+                    "-l",
                     "-n"
                 ])
-                
-                # Parse the output to get all devices in the tree
+
                 device_tree = []
                 for line in output.strip().split('\n'):
                     if line.strip():
                         device_name = line.strip()
-                        # Add both with and without /dev/ prefix for comparison
                         device_tree.append(f"/dev/{device_name}")
                         device_tree.append(device_name)
-                
-                # Check if any active device is in this physical drive's tree
+
                 for active_device in active_devices:
-                    # Handle different formats of device names
                     active_variants = [
                         active_device,
                         active_device.replace('/dev/', ''),
                         active_device.replace('/dev/mapper/', '')
                     ]
-                    
-                    # Check if any variant of the active device is in the device tree
+
                     for variant in active_variants:
                         if variant in device_tree:
                             physical_drives.add(physical_device)
                             logging.info(f"Found active device '{active_device}' on physical drive '{physical_device}'")
                             break
-                    
+
                     if physical_device in physical_drives:
                         break
-                        
+
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                # Skip this physical device if lsblk fails
                 logging.error(f"Could not query device tree for {physical_device}: {str(e)}")
                 continue
-                
+
     except (AttributeError, TypeError) as e:
         logging.error(f"Error processing device data structures: {str(e)}")
     except MemoryError:
         logging.error("Insufficient memory to process logical volume mapping")
     except OSError as e:
         logging.error(f"OS error during logical volume mapping: {str(e)}")
-    
+
     return physical_drives
 
 
 def get_base_disk(device_name: str) -> str:
     """
     Extract base disk name from a device name.
-    Examples: 
+    Examples:
         'nvme0n1p1' -> 'nvme0n1'
         'sda1' -> 'sda'
         'nvme0n1' -> 'nvme0n1'
     """
     import re
-    
+
     try:
-        # Handle nvme devices (e.g., nvme0n1p1 -> nvme0n1)
         if 'nvme' in device_name:
             match = re.match(r'(nvme\d+n\d+)', device_name)
             if match:
                 return match.group(1)
-        
-        # Handle traditional devices (e.g., sda1 -> sda)
+
         match = re.match(r'([a-zA-Z/]+[a-zA-Z])', device_name)
         if match:
             return match.group(1)
-        
-        # If no pattern matches, return the original
+
         return device_name
-        
+
     except (re.error, AttributeError) as e:
         logging.error(f"Regex error processing device name '{device_name}': {str(e)}")
         return device_name

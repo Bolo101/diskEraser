@@ -945,6 +945,9 @@ class DiskEraserGUI:
         start_msg = f"Démarrage du formatage de {len(disks)} disque(s) en {fs_choice}"
         self.update_gui_log(start_msg)
         log_info(start_msg)
+        self.update_gui_log(f"Table de partitions sélectionnée : {partition_table.upper()}")
+        log_info(f"Selected partition table: {partition_table.upper()}")
+
         total_disks = len(disks)
         completed_disks = 0
         try:
@@ -971,9 +974,11 @@ class DiskEraserGUI:
             error_msg = f"Erreur du pool de threads pendant le formatage : {str(e)}"
             self.update_gui_log(error_msg)
             log_error(error_msg)
+
         self._set_status('Formatage terminé', 'idle')
         self._progress_phase_var.set('Terminé')
         self._progress_detail_var.set('Opération de formatage terminée')
+        self.update_gui_log("Operation completed")
         log_info('Format process completed')
         try:
             messagebox.showinfo('Terminé', 'L’opération de formatage est terminée.')
@@ -1459,6 +1464,8 @@ class DiskEraserGUI:
         log_info(start_msg)
         self.update_gui_log(f"Système de fichiers sélectionné : {fs_choice}")
         log_info(f"Selected filesystem: {fs_choice}")
+        self.update_gui_log(f"Table de partitions sélectionnée : {partition_table.upper()}")
+        log_info(f"Selected partition table: {partition_table.upper()}")
 
         total_disks = len(disks)
         completed_disks = 0
@@ -1500,6 +1507,7 @@ class DiskEraserGUI:
         self._progress_phase_var.set('Terminé')
         self._progress_detail_var.set("L’opération d’effacement est terminée")
         self._set_status('Effacement terminé', 'idle')
+        self.update_gui_log("Operation completed")
         log_info('Erasure process completed')
         try:
             messagebox.showinfo('Terminé', 'L’opération d’effacement est terminée.')

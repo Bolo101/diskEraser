@@ -10,7 +10,6 @@ from disk_erase import erase_disk_crypto, erase_disk_hdd, get_disk_serial, is_ss
 from disk_format import format_disk
 from disk_partition import partition_disk
 from log_handler import log_error, log_info, log_erase_operation
-from stats_manager import record_wipe
 from utils import get_base_disk, get_physical_drives_for_logical_volumes, run_command
 
 
@@ -62,9 +61,6 @@ def process_disk(disk: str, fs_choice: str, passes: int,
         # ── Journalisation opération ──
         log_erase_operation(disk_id, fs_choice, method_str)
 
-        # ── Compteur ──
-        count = record_wipe(disk_id, fs_choice, method_str)
-        _log(f"✓ Disque {disk_id} traité avec succès. Total supports blanchis : {count}")
 
     except FileNotFoundError as e:
         log_error(f"Commande introuvable : {e}")

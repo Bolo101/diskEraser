@@ -192,7 +192,7 @@ sudo e-broyeur --cli     # Mode CLI
 
     - **ISO précompilée**
 
-    Télécharger la version précompilée : [e-Broyeur ISO v7.0](https://archive.org/details/e-Broyeur-v7.1)
+    Télécharger la version précompilée : [e-Broyeur ISO v7.1](https://archive.org/details/e-Broyeur-v7.1)
 
     ```txt
     - e-Broyeur-v7.0-64bits.iso : 3e082551ce09c6cb822f68f4d06925d97cf3f5f93c6445a897c472fe9a44d5ab

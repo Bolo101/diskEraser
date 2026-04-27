@@ -88,6 +88,7 @@ sudo systemctl restart systemd-udevd
 - **Configuration après effacement** : partitionnement et formatage automatiques.
 - **Formats flexibles** : prise en charge des systèmes de fichiers NTFS, EXT4 et VFAT.
 - **Formatage seul** : formater uniquement le disque dans le format choisi, sans effacement des données.
+- **Choix de la table de partition** (MBR / GPT)
 - **Plusieurs options de déploiement** : exécution en Python, en commande Linux ou via ISO amorçable.
 - **Présentation améliorée de la liste des disques en mode GUI** : affiche des informations utiles sur les disques détectés.
 - **Système de journalisation complet** :

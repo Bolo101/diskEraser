@@ -452,7 +452,7 @@ class DiskEraserGUI:
                 activeforeground=self._ACCENT2,
                 font=('Segoe UI', 9), bd=0, highlightthickness=0,
             ).pack(side=tk.LEFT, padx=(0, 10))
-        tk.Label(pt_block, text='Utiliser MBR par défaut', bg=self._SURFACE,
+        tk.Label(pt_block, text='Par défaut:MBR', bg=self._SURFACE,
                  fg=self._TEXT, font=('Segoe UI', 8)).pack(anchor='w', pady=(0, 2))
 
         self._divider(inner, pady=6)

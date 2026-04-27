@@ -16,7 +16,8 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from config_manager import (change_password, is_password_set,
-                             set_password, verify_password)
+                             set_password, verify_password,
+                             get_passes, set_passes)
 from export_manager import ExportDialog
 from log_handler import (generate_log_file_pdf, generate_session_pdf,
                           log_info, log_error, log_application_exit, purge_logs)
@@ -325,6 +326,24 @@ class AdminInterface(tk.Toplevel):
                    command=self._open_export,
                    style="AdminAction.TButton").pack(fill=tk.X)
 
+        # ── Paramètres d'effacement ──
+        params_frame = ttk.LabelFrame(body, text="Paramètres d'effacement", padding=10)
+        params_frame.pack(fill=tk.X, pady=(0, 6))
+
+        passes_row = ttk.Frame(params_frame)
+        passes_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(passes_row, text="Nombre de passes (écrasement standard) :").pack(side=tk.LEFT)
+        self._passes_var = tk.StringVar(value=str(get_passes()))
+        ttk.Entry(passes_row, textvariable=self._passes_var,
+                  width=6).pack(side=tk.LEFT, padx=(10, 0))
+        ttk.Button(passes_row, text="Appliquer",
+                   command=self._save_passes,
+                   style="AdminAction.TButton").pack(side=tk.LEFT, padx=(8, 0))
+
+        self._passes_err_var = tk.StringVar()
+        ttk.Label(params_frame, textvariable=self._passes_err_var,
+                  foreground="#e74c3c").pack(anchor="w")
+
         # ── Maintenance ──
         maint_frame = ttk.LabelFrame(body, text="Maintenance", padding=10)
         maint_frame.pack(fill=tk.X, pady=(0, 6))
@@ -507,6 +526,21 @@ class AdminInterface(tk.Toplevel):
 
         ttk.Button(body, text="Valider", command=submit,
                    style="AdminClose.TButton").pack(pady=(4, 0))
+
+    def _save_passes(self) -> None:
+        """Enregistre le nombre de passes saisi dans le panneau admin."""
+        try:
+            passes = int(self._passes_var.get())
+            set_passes(passes)
+            self._passes_err_var.set("")
+            messagebox.showinfo(
+                "Succès",
+                f"Nombre de passes mis à jour : {passes}",
+                parent=self,
+            )
+            log_info(f"Nombre de passes modifié à {passes} par l'administrateur.")
+        except (ValueError, PermissionError) as exc:
+            self._passes_err_var.set(str(exc))
 
     def _shutdown(self) -> None:
         if messagebox.askyesno("Éteindre",

@@ -16,10 +16,13 @@ from utils import get_base_disk, get_physical_drives_for_logical_volumes, run_co
 
 def process_disk(disk: str, fs_choice: str, passes: int,
                  use_crypto: bool = False, crypto_fill: str = "random",
-                 log_func=None) -> None:
+                 log_func=None, label: str = None,
+                 progress_callback=None,
+                 partition_table: str = "mbr") -> None:
     """
     Efface, partitionne et formate un disque.
     Incrémente le compteur de supports blanchis en cas de succès.
+    label : libellé à appliquer après formatage (None = aucun libellé).
     """
     def _log(msg: str) -> None:
         log_info(msg)
@@ -48,13 +51,13 @@ def process_disk(disk: str, fs_choice: str, passes: int,
 
         # ── Partitionnement ──
         _log(f"Création de la partition sur {disk_id}")
-        partition_disk(disk)
+        partition_disk(disk, partition_table=partition_table)
         _log("Attente de reconnaissance de la partition…")
         time.sleep(5)
 
         # ── Formatage ──
         _log(f"Formatage de {disk_id} en {fs_choice}")
-        format_disk(disk, fs_choice)
+        format_disk(disk, fs_choice, label=label)
 
         # ── Journalisation opération ──
         log_erase_operation(disk_id, fs_choice, method_str)

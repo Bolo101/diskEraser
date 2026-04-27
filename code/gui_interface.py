@@ -435,7 +435,7 @@ class DiskEraserGUI:
 
         pt_block = tk.Frame(fs_pt_row, bg=self._SURFACE)
         pt_block.pack(side=tk.LEFT, fill=tk.Y)
-        tk.Label(pt_block, text="Table de partitions", bg=self._SURFACE, fg=self._TEXT,
+        tk.Label(pt_block, text="Table partition", bg=self._SURFACE, fg=self._TEXT,
                  font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 2))
         pt_row = tk.Frame(pt_block, bg=self._SURFACE)
         pt_row.pack(anchor='w')

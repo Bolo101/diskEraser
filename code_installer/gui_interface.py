@@ -933,12 +933,18 @@ class DiskEraserGUI:
             error_msg = f"Erreur du pool de threads pendant le formatage : {str(e)}"
             self.update_gui_log(error_msg)
             log_error(error_msg)
+        log_info('Format process completed')
+        # ── FIX : délégation au thread principal pour garantir l'ordre log → popup ──
+        self.root.after(0, self._on_format_complete)
+
+    def _on_format_complete(self) -> None:
+        """Appelé sur le thread principal à la fin du formatage."""
         self._set_status('Formatage terminé', 'idle')
         self._progress_phase_var.set('Terminé')
         self._progress_detail_var.set('Opération de formatage terminée')
-        log_info('Format process completed')
+        self.update_gui_log("Operation completed")
         try:
-            messagebox.showinfo('Terminé', 'L’opération de formatage est terminée.')
+            messagebox.showinfo('Terminé', "L'opération de formatage est terminée.")
         except tk.TclError as e:
             self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
 
@@ -1438,13 +1444,19 @@ class DiskEraserGUI:
             self.disk_progress = {}
             self.refresh_disks()
 
+        log_info('Erasure process completed')
+        # ── FIX : délégation au thread principal pour garantir l'ordre log → popup ──
+        self.root.after(0, self._on_erase_complete)
+
+    def _on_erase_complete(self) -> None:
+        """Appelé sur le thread principal à la fin de l'effacement."""
         self.update_progress(100)
         self._progress_phase_var.set('Terminé')
-        self._progress_detail_var.set("L’opération d’effacement est terminée")
+        self._progress_detail_var.set("L'opération d'effacement est terminée")
         self._set_status('Effacement terminé', 'idle')
-        log_info('Erasure process completed')
+        self.update_gui_log("Operation completed")
         try:
-            messagebox.showinfo('Terminé', 'L’opération d’effacement est terminée.')
+            messagebox.showinfo('Terminé', "L'opération d'effacement est terminée.")
         except tk.TclError as e:
             self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
 
@@ -1503,17 +1515,23 @@ class DiskEraserGUI:
             log_error(f"Erreur lors de la mise à jour de l'état de progression : {str(e)}")
 
     def update_gui_log(self, message: str) -> None:
-        try:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
-            self.log_text.see(tk.END)
-        except (tk.TclError, ValueError, TypeError, OSError) as e:
+        """
+        Insertion thread-safe dans le journal GUI.
+        Peut être appelé depuis n'importe quel thread : la mise à jour est
+        toujours exécutée par la boucle principale Tkinter via root.after(0, …).
+        """
+        def _insert() -> None:
             try:
-                log_error(f"Erreur lors de la mise à jour du journal GUI : {str(e)}")
-            except (IOError, OSError):
-                pass
+                timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+                self.log_text.see(tk.END)
+            except (tk.TclError, ValueError, TypeError, OSError) as e:
+                try:
+                    log_error(f"Erreur lors de la mise à jour du journal GUI : {str(e)}")
+                except (IOError, OSError):
+                    pass
 
-
+        self.root.after(0, _insert)
 def run_gui_mode() -> None:
     try:
         root = tk.Tk()

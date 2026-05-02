@@ -508,7 +508,7 @@ class DiskEraserGUI:
 
         self._action_button(
             inner,
-            "▶ DÉMARRER L’EFFACEMENT",
+            "▶ DÉMARRER L'EFFACEMENT",
             self.start_erasure,
             bg='#b3342b',
             hover_bg=self._DANGER,
@@ -805,7 +805,7 @@ class DiskEraserGUI:
 
         if active_physical_drives:
             self.disclaimer_var.set(
-                "⚠ Le disque en rouge contient le système actif. L’effacer provoquera une panne système et une perte de données."
+                "⚠ Le disque en rouge contient le système actif. L'effacer provoquera une panne système et une perte de données."
             )
         else:
             self.disclaimer_var.set('')
@@ -844,7 +844,7 @@ class DiskEraserGUI:
             except Exception:
                 pass
         self.ssd_disclaimer_var.set(
-            "ℹ SSD détecté. L’effacement multi-passes peut user le support et n’est pas le meilleur choix. Privilégiez l’effacement cryptographique."
+            "ℹ SSD détecté. L'effacement multi-passes peut user le support et n'est pas le meilleur choix. Privilégiez l'effacement cryptographique."
             if has_ssd else ''
         )
 
@@ -913,9 +913,9 @@ class DiskEraserGUI:
                 self.update_gui_log(f"Permission refusée pour obtenir le numéro de série de {disk_name} : {str(e)}")
                 log_error(f"Permission refusée pour obtenir le numéro de série de {disk_name} : {str(e)}")
             except (IOError, OSError) as e:
-                disk_identifier = f"{disk_name} (erreur d’E/S)"
-                self.update_gui_log(f"Erreur d’E/S lors de la récupération du numéro de série de {disk_name} : {str(e)}")
-                log_error(f"Erreur d’E/S lors de la récupération du numéro de série de {disk_name} : {str(e)}")
+                disk_identifier = f"{disk_name} (erreur d'E/S)"
+                self.update_gui_log(f"Erreur d'E/S lors de la récupération du numéro de série de {disk_name} : {str(e)}")
+                log_error(f"Erreur d'E/S lors de la récupération du numéro de série de {disk_name} : {str(e)}")
             disk_identifiers.append(disk_identifier)
 
         disk_list = '\n'.join(disk_identifiers)
@@ -981,15 +981,20 @@ class DiskEraserGUI:
             self.update_gui_log(error_msg)
             log_error(error_msg)
 
+        log_info('Format process completed')
+        # ── FIX : délégation au thread principal pour garantir l'ordre log → popup ──
+        self.root.after(0, self._on_format_complete)
+
+    def _on_format_complete(self) -> None:
+        """Appelé sur le thread principal à la fin du formatage."""
         self._set_status('Formatage terminé', 'idle')
         self._progress_phase_var.set('Terminé')
         self._progress_detail_var.set('Opération de formatage terminée')
         self.update_gui_log("Operation completed")
-        log_info('Format process completed')
         try:
-            messagebox.showinfo('Terminé', 'L’opération de formatage est terminée.')
+            messagebox.showinfo('Terminé', "L'opération de formatage est terminée.")
         except tk.TclError as e:
-            self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
+            self.update_gui_log(f"Erreur lors de l'affichage de la boîte de dialogue de fin : {str(e)}")
 
     def format_single_disk(self, disk, fs_choice, label=None, partition_table="mbr"):
         disk_name = disk.replace('/dev/', '')
@@ -1019,7 +1024,7 @@ class DiskEraserGUI:
     def power_off_system(self) -> None:
         import subprocess
         if not messagebox.askyesno(
-            'Confirmer l’arrêt',
+            'Confirmer l\'arrêt',
             'Voulez-vous vraiment éteindre le système ?\n\nTout travail non enregistré sera perdu.',
         ):
             return
@@ -1031,8 +1036,8 @@ class DiskEraserGUI:
             time.sleep(1)
             subprocess.run(['poweroff'], check=True)
         except subprocess.CalledProcessError as e:
-            error_msg = f"Erreur lors de l’exécution de la commande d’arrêt : {str(e)}"
-            messagebox.showerror('Erreur d’arrêt', error_msg)
+            error_msg = f"Erreur lors de l'exécution de la commande d'arrêt : {str(e)}"
+            messagebox.showerror('Erreur d\'arrêt', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
         except FileNotFoundError:
@@ -1041,7 +1046,7 @@ class DiskEraserGUI:
             self.update_gui_log(error_msg)
             log_error(error_msg)
         except (PermissionError, IOError, OSError, MemoryError, ValueError, TypeError) as e:
-            error_msg = f"Erreur système pendant l’arrêt : {str(e)}"
+            error_msg = f"Erreur système pendant l'arrêt : {str(e)}"
             messagebox.showerror('Erreur système', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
@@ -1144,7 +1149,7 @@ class DiskEraserGUI:
         title_dlg.pack(side=_tk.LEFT, fill=_tk.Y)
         _tk.Label(title_dlg, text='Support externe', bg=self._SURFACE, fg=self._TEXT,
                   font=('Segoe UI', 12, 'bold')).pack(anchor='w')
-        _tk.Label(hdr, text="Choisissez la partition cible pour l’export PDF.",
+        _tk.Label(hdr, text="Choisissez la partition cible pour l'export PDF.",
                   bg=self._SURFACE, fg=self._TEXT_DIM, font=('Segoe UI', 9)).pack(anchor='w', pady=(3, 0))
         _tk.Frame(dlg, bg=self._BORDER, height=1).pack(fill=_tk.X)
 
@@ -1237,7 +1242,7 @@ class DiskEraserGUI:
         if not external_disks:
             messagebox.showerror(
                 'Aucun support externe détecté',
-                "Aucun disque externe n’a été détecté.\n\nBranchez une clé USB, un disque dur externe ou tout autre support amovible, puis réessayez.",
+                "Aucun disque externe n'a été détecté.\n\nBranchez une clé USB, un disque dur externe ou tout autre support amovible, puis réessayez.",
             )
             return None
 
@@ -1282,7 +1287,7 @@ class DiskEraserGUI:
         if not path_norm.startswith(mp_norm):
             messagebox.showwarning(
                 'Destination invalide',
-                f"Le chemin choisi n’est pas sur le support externe monté.\nVeuillez choisir un emplacement sous : {mount_point}",
+                f"Le chemin choisi n'est pas sur le support externe monté.\nVeuillez choisir un emplacement sous : {mount_point}",
             )
             if self._pending_unmount_dir:
                 self._unmount_partition(self._pending_unmount_dir)
@@ -1346,7 +1351,7 @@ class DiskEraserGUI:
             self._set_status('Prêt', 'idle')
 
     def exit_application(self) -> None:
-        exit_message = 'Application fermée par l’utilisateur via le bouton Quitter'
+        exit_message = "Application fermée par l'utilisateur via le bouton Quitter"
         log_info(exit_message)
         self.update_gui_log(exit_message)
         session_end()
@@ -1373,7 +1378,7 @@ class DiskEraserGUI:
             if not messagebox.askyesno(
                 'Danger — disque système sélectionné',
                 'Attention : vous avez sélectionné le disque système actif.\n\n'
-                'L’effacement de ce disque peut faire tomber le système et provoquer une perte définitive des données.\n\n'
+                "L'effacement de ce disque peut faire tomber le système et provoquer une perte définitive des données.\n\n"
                 'Voulez-vous vraiment continuer ?',
                 icon='warning',
             ):
@@ -1394,7 +1399,7 @@ class DiskEraserGUI:
                 if not messagebox.askyesno(
                     'Avertissement SSD',
                     'Un ou plusieurs SSD sont sélectionnés.\n\n'
-                    'L’écrasement multi-passes peut user inutilement le support et n’est généralement pas recommandé pour un SSD.\n\n'
+                    "L'écrasement multi-passes peut user inutilement le support et n'est généralement pas recommandé pour un SSD.\n\n"
                     'Voulez-vous continuer quand même ?',
                     icon='warning',
                 ):
@@ -1422,7 +1427,7 @@ class DiskEraserGUI:
         method_text = "effacement cryptographique" if erase_method == "crypto" else f"écrasement standard ({passes} passe(s))"
         disk_list = '\n'.join(disk_identifiers)
         if not messagebox.askyesno(
-            'Confirmer l’effacement',
+            "Confirmer l'effacement",
             f"Vous êtes sur le point de lancer {method_text} sur :\n\n{disk_list}\n\n"
             f"Système de fichiers cible : {fs_choice}\n\n"
             "Toutes les données seront détruites.\n\n"
@@ -1437,7 +1442,7 @@ class DiskEraserGUI:
         self._progress_phase_var.set('Effacement')
         self._progress_detail_var.set('Préparation des tâches')
         self._progress_stats_var.set(f"{len(selected_disks)} disque{'s' if len(selected_disks) > 1 else ''}")
-        self._set_status('Préparation de l’effacement…', 'busy')
+        self._set_status("Préparation de l'effacement…", 'busy')
         self.update_progress(0)
 
         try:
@@ -1448,7 +1453,7 @@ class DiskEraserGUI:
                 daemon=True
             ).start()
         except (RuntimeError, OSError) as e:
-            error_msg = f"Erreur lors du démarrage du thread d’effacement : {str(e)}"
+            error_msg = f"Erreur lors du démarrage du thread d'effacement : {str(e)}"
             messagebox.showerror('Erreur de thread', error_msg)
             self.update_gui_log(error_msg)
             log_error(error_msg)
@@ -1465,7 +1470,7 @@ class DiskEraserGUI:
         else:
             method_str = f"écrasement standard en {passes} passe(s)"
 
-        start_msg = f"Démarrage de l’effacement sécurisé de {len(disks)} disque(s) avec {method_str}"
+        start_msg = f"Démarrage de l'effacement sécurisé de {len(disks)} disque(s) avec {method_str}"
         self.update_gui_log(start_msg)
         log_info(start_msg)
         self.update_gui_log(f"Système de fichiers sélectionné : {fs_choice}")
@@ -1501,7 +1506,7 @@ class DiskEraserGUI:
                         log_error(error_msg)
                         self.refresh_disks()
         except Exception as e:
-            error_msg = f"Erreur du pool de threads pendant l’effacement : {str(e)}"
+            error_msg = f"Erreur du pool de threads pendant l'effacement : {str(e)}"
             self.update_gui_log(error_msg)
             log_error(error_msg)
         finally:
@@ -1509,16 +1514,21 @@ class DiskEraserGUI:
             self.disk_progress = {}
             self.refresh_disks()
 
+        log_info('Erasure process completed')
+        # ── FIX : délégation au thread principal pour garantir l'ordre log → popup ──
+        self.root.after(0, self._on_erase_complete)
+
+    def _on_erase_complete(self) -> None:
+        """Appelé sur le thread principal à la fin de l'effacement."""
         self.update_progress(100)
         self._progress_phase_var.set('Terminé')
-        self._progress_detail_var.set("L’opération d’effacement est terminée")
+        self._progress_detail_var.set("L'opération d'effacement est terminée")
         self._set_status('Effacement terminé', 'idle')
         self.update_gui_log("Operation completed")
-        log_info('Erasure process completed')
         try:
-            messagebox.showinfo('Terminé', 'L’opération d’effacement est terminée.')
+            messagebox.showinfo('Terminé', "L'opération d'effacement est terminée.")
         except tk.TclError as e:
-            self.update_gui_log(f"Erreur lors de l’affichage de la boîte de dialogue de fin : {str(e)}")
+            self.update_gui_log(f"Erreur lors de l'affichage de la boîte de dialogue de fin : {str(e)}")
 
     def process_disk_wrapper(self, disk: str, fs_choice: str, passes: int, erase_method: str,
                              label: str = None, partition_table: str = "mbr") -> None:
@@ -1581,16 +1591,25 @@ class DiskEraserGUI:
             self.update_gui_log(f"Erreur lors de la mise à jour de l'état de progression : {str(e)}")
             log_error(f"Erreur lors de la mise à jour de l'état de progression : {str(e)}")
 
+    # ── FIX : update_gui_log thread-safe via root.after ──────────────────────
     def update_gui_log(self, message: str) -> None:
-        try:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-            self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
-            self.log_text.see(tk.END)
-        except (tk.TclError, ValueError, TypeError, OSError) as e:
+        """
+        Insertion thread-safe dans le journal GUI.
+        Peut être appelé depuis n'importe quel thread : la mise à jour est
+        toujours exécutée par la boucle principale Tkinter via root.after(0, …).
+        """
+        def _insert() -> None:
             try:
-                log_error(f"Erreur lors de la mise à jour du journal GUI : {str(e)}")
-            except (IOError, OSError):
-                pass
+                timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+                self.log_text.see(tk.END)
+            except (tk.TclError, ValueError, TypeError, OSError) as e:
+                try:
+                    log_error(f"Erreur lors de la mise à jour du journal GUI : {str(e)}")
+                except (IOError, OSError):
+                    pass
+
+        self.root.after(0, _insert)
 
 
 def run_gui_mode() -> None:
@@ -1607,8 +1626,8 @@ def run_gui_mode() -> None:
         log_error(f"Bibliothèque GUI requise indisponible : {str(e)}")
         sys.exit(1)
     except MemoryError:
-        print('Mémoire insuffisante pour démarrer l’interface graphique')
-        log_error('Mémoire insuffisante pour démarrer l’interface graphique')
+        print("Mémoire insuffisante pour démarrer l'interface graphique")
+        log_error("Mémoire insuffisante pour démarrer l'interface graphique")
         sys.exit(1)
     except OSError as e:
         print(f"Erreur système au démarrage de l'interface graphique : {str(e)}")

@@ -195,8 +195,8 @@ sudo e-broyeur --cli     # Mode CLI
     Télécharger la version précompilée : [e-Broyeur ISO v7.1](https://archive.org/details/e-Broyeur-v7.1)
 
     ```txt
-    - e-Broyeur-v7.0-64bits.iso : 3e082551ce09c6cb822f68f4d06925d97cf3f5f93c6445a897c472fe9a44d5ab
-    - e-Broyeur-v7.0-32bits.iso : 3a664d1ebba97f89d62bbb065536b92b348504fb62202f4adca0793ab27fa753
+    - e-Broyeur-v7.1-64bits.iso : 32c2c104614bcdaa4c1ca2f3899d16722ab2782193588848fa31851bbc13e413
+    - e-Broyeur-v7.1-32bits.iso : 2e57e5aea14993026488a73e36c5bb0121e379fa4c655bbd028f9e7d9e682c03
     ```
 
 2. **Flasher sur une clé USB** :
